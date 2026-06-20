@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MilkVio.ACR")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1362bdeb8f40088da2debcb03c3ef68302cff191")]
 [assembly: System.Reflection.AssemblyProductAttribute("MilkVio.ACR")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MilkVio.ACR")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
