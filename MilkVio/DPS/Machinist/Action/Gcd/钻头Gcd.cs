@@ -1,0 +1,55 @@
+using System.Collections.Generic;
+using PromeRotation.Data;
+using PromeRotation.Extensions;
+using PromeRotation.Managers;
+using PromeRotation.Resolvers;
+using MilkVio.DPS.Machinist.MCHData;
+
+namespace MilkVio.DPS.Machinist.Action.Gcd;
+
+public class 钻头Gcd : IDecisionResolver
+{
+    public CheckResult Check()
+    {
+        var currentAttackRange = GameData.GetCurrentAttackRange(25);
+        if (Core.Target == null) return new CheckResult(false, "当前无目标");
+        if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
+        var me = Core.Me;
+        if(me.DistanceToMe() > currentAttackRange) return new CheckResult(false, "距离过远");
+        var isCantUse = me.HasStatus(MCHStatus.过热);
+        if (isCantUse) return new CheckResult(false, "无法使用");
+        
+        if (MachinistHelper.GetCurrent钻头Charge() >= 0.95)
+        {
+            var 回转飞锯cd = MCHSkill.回转飞锯.GetActionCooldown();
+            if (PromeSettings.Instance.GetQt(MCHQt.先打飞锯) && 回转飞锯cd == 0)
+            {
+                return new CheckResult(false, "先打飞锯");
+            }
+            
+            if (me.Level >= 94)
+            {
+                if (MachinistHelper.GetCurrent钻头Charge() >= 1.95) return new CheckResult(true, "所有条件满足 && 冷却完毕");
+                
+                if (MachinistHelper.GetCurrent钻头Charge() >= 1 && MachinistHelper.GetCurrent钻头Charge() < 2)
+                {
+                    var 空气锚cd = MCHSkill.空气锚.GetActionCooldown();
+                    if (空气锚cd == 0 || 回转飞锯cd == 0)
+                    {
+                        return new CheckResult(false, "有大技能CD");
+                    }
+                    return new CheckResult(true, "94 所有条件满足 && 冷却完毕");
+                }
+            }
+            
+            return new CheckResult(true, "所有条件满足 && 冷却完毕");
+        }
+        
+        return new CheckResult(false, "未冷却");
+    }
+
+    public PAction GetAction()
+    {
+        return new PAction(MCHSkill.钻头, ActionType.Gcd, ActionTargetType.Target);
+    }
+}

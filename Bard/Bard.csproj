@@ -1,0 +1,54 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+
+        <!-- 指定输出目录 -->
+        <OutputPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\pluginConfigs\PromeRotation\ACR\Bard</OutputPath>
+
+        <!-- 不再自动附加 net10.0-windows-->
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Folder Include="Action\OffGcd\" />
+    </ItemGroup>
+
+    <!-- 这里需要手动引用你的dalamud还有PromeRotation本体以及ECommons（如果你需要用到的话）-->
+    <ItemGroup>
+        <Reference Include="Dalamud">
+            <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\Dalamud.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
+        <Reference Include="Dalamud.Bindings.ImGui">
+            <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\Dalamud.Bindings.ImGui.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
+        <Reference Include="ECommons">
+            <HintPath>D:\.Dev\.PromeRotation\PromeRotation\bin\x64\Debug\ECommons.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
+        <Reference Include="Lumina">
+            <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\Lumina.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
+        <Reference Include="Lumina.Excel">
+            <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\Lumina.Excel.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
+        <Reference Include="PromeRotation">
+            <HintPath>D:\.Dev\.PromeRotation\PromeRotation\bin\x64\Debug\PromeRotation.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+
+</Project>

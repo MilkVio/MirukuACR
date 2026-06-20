@@ -1,0 +1,12 @@
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\MilkVio.csproj.AssemblyReference.cache
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\MilkVio.GeneratedMSBuildEditorConfig.editorconfig
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\MilkVio.AssemblyInfoInputs.cache
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\MilkVio.AssemblyInfo.cs
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\MilkVio.csproj.CoreCompileInputs.cache
+C:\Users\Vio\AppData\Roaming\XIVLauncherCN\pluginConfigs\PromeRotation\ACR\MilkVio\MilkVio.ACR.deps.json
+C:\Users\Vio\AppData\Roaming\XIVLauncherCN\pluginConfigs\PromeRotation\ACR\MilkVio\MilkVio.ACR.dll
+C:\Users\Vio\AppData\Roaming\XIVLauncherCN\pluginConfigs\PromeRotation\ACR\MilkVio\MilkVio.ACR.pdb
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\MilkVio.ACR.dll
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\refint\MilkVio.ACR.dll
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\MilkVio.ACR.pdb
+D:\.Dev\MirukuACR\MilkVio\obj\Debug\ref\MilkVio.ACR.dll
