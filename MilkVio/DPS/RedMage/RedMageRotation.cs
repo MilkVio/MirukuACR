@@ -24,6 +24,7 @@ public class RedMageRotation : IRotation
     public IRotationEventHandler GetEventHandler() => _eventHandler;
     
     // 管理该职业所有的决策解析器
+    private readonly List<IDecisionResolver> _alwaysResolvers = new();
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
     
@@ -158,6 +159,16 @@ public class RedMageRotation : IRotation
         return null;
     }
     
+    public PAction? NextAlways()
+    {
+        foreach (var resolver in _alwaysResolvers)
+        {
+            if (resolver.Check().Success)
+                return resolver.GetAction();
+        }
+        return null;
+    }
+
     public PAction? NextGcd()
     {
         // 遍历所有GCD解析器
@@ -189,8 +200,21 @@ public class RedMageRotation : IRotation
     public void UpdateDebugStatus()
     {
         // 清空上一帧的旧数据
+        RotationManager.AlwaysSolverStatus.Clear();
         RotationManager.GcdSolverStatus.Clear();
         RotationManager.OffGcdSolverStatus.Clear();
+
+        foreach (var resolver in _alwaysResolvers)
+        {
+            var result = resolver.Check();
+
+            RotationManager.AlwaysSolverStatus.Add(new SolverStatus
+            {
+                Name = resolver.GetType().Name,
+                Success = result.Success,
+                Message = result.Message
+            });
+        }
         
         // GCD状态列表
         foreach (var resolver in _gcdResolvers)

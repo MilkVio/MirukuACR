@@ -20,6 +20,7 @@ public class ReaperRotation// : IRotation
     private readonly IRotationEventHandler _eventHandler = new ReaperRotationEventHandler();
     public IRotationEventHandler GetEventHandler() => _eventHandler;
 
+    private readonly List<IDecisionResolver> _alwaysResolvers = new();
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
 
@@ -101,6 +102,16 @@ public class ReaperRotation// : IRotation
             return null;
         }
 
+    public PAction? NextAlways()
+    {
+        foreach (var resolver in _alwaysResolvers)
+        {
+            if (resolver.Check().Success)
+                return resolver.GetAction();
+        }
+        return null;
+    }
+
     public PAction? NextGcd()
     {
         foreach (var resolver in _gcdResolvers)
@@ -127,8 +138,20 @@ public class ReaperRotation// : IRotation
 
     public void UpdateDebugStatus()
     {
+        RotationManager.AlwaysSolverStatus.Clear();
         RotationManager.GcdSolverStatus.Clear();
         RotationManager.OffGcdSolverStatus.Clear();
+
+        foreach (var resolver in _alwaysResolvers)
+        {
+            var result = resolver.Check();
+            RotationManager.AlwaysSolverStatus.Add(new SolverStatus
+            {
+                Name = resolver.GetType().Name,
+                Success = result.Success,
+                Message = result.Message
+            });
+        }
 
         foreach (var resolver in _gcdResolvers)
         {

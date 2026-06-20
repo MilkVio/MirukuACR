@@ -1,4 +1,4 @@
-using PromeRotation.Data;
+﻿using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using PromeRotation.Resolvers;
@@ -18,7 +18,7 @@ public class 暗影使者OffGcd : IDecisionResolver
         if (Core.Me.DistanceToMe() > 10f) return new CheckResult(false, "当前目标过远（>10m）");
         if (Core.Me.Level < 90) return new CheckResult(false, "未习得该技能");
 
-        if (DRKSkill.暗影使者.GetActionCharges() > 0)
+        if (DRKSkill.暗影使者.GetActionCharges() >= 1)
         {
             // 最终爆发
             if (PromeSettings.Instance.GetQt(DRKQt.最终爆发)) return new CheckResult(true, "最终爆发");

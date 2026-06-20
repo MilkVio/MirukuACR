@@ -1,4 +1,4 @@
-using PromeRotation.Core;
+﻿using PromeRotation.Core;
 using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Helpers;
@@ -15,7 +15,7 @@ public class 重锤构想OffGcd : IDecisionResolver
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
         var player = Core.Me;
-        var canUse = !player.HasStatus(PCTBuff.重锤连击) && PCTSkill.武器构想.GetActionCharges() > 0;
+        var canUse = !player.HasStatus(PCTBuff.重锤连击) && PCTSkill.武器构想.GetActionCharges() >= 1;
 
         if (player.Level < 86)
         {
@@ -60,7 +60,7 @@ public class 重锤构想OffGcd : IDecisionResolver
                         return new CheckResult(true, "正常打一个");
                     }
 
-                    if (!PromeSettings.Instance.GetQt(PCTQt.星空构想) && PCTSkill.武器构想.GetActionCharges() == 2)
+                    if (!PromeSettings.Instance.GetQt(PCTQt.星空构想) && PCTSkill.武器构想.GetActionCharges() >= 2)
                     {
                         return new CheckResult(true, "即将溢出");
                     }

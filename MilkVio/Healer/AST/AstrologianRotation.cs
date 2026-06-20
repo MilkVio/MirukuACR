@@ -20,6 +20,7 @@ namespace MilkVio.Healer.AST;
 public sealed class AstrologianRotation : IRotation
 {
     private readonly IRotationEventHandler _eventHandler = new DefaultRotationEventHandler();
+    private readonly List<IDecisionResolver> _alwaysResolvers = new();
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
     private readonly AstrologianRotationContext _context = new();
@@ -134,14 +135,28 @@ public sealed class AstrologianRotation : IRotation
         return null;
     }
 
+    public PAction? NextAlways() => Resolve(_alwaysResolvers);
+
     public PAction? NextGcd() => Resolve(_gcdResolvers);
 
     public PAction? NextOffGcd() => Resolve(_offGcdResolvers);
 
     public void UpdateDebugStatus()
     {
+        RotationManager.AlwaysSolverStatus.Clear();
         RotationManager.GcdSolverStatus.Clear();
         RotationManager.OffGcdSolverStatus.Clear();
+
+        foreach (var resolver in _alwaysResolvers)
+        {
+            var result = resolver.Check();
+            RotationManager.AlwaysSolverStatus.Add(new SolverStatus
+            {
+                Name = resolver.GetType().Name,
+                Success = result.Success,
+                Message = result.Message
+            });
+        }
 
         foreach (var resolver in _gcdResolvers)
         {

@@ -17,7 +17,6 @@ using PromeRotation.Timeline;
 using PromeRotation.Timeline.Core;
 using PromeRotation.UI;
 using PromeRotation.UI.HotKey;
-using PromeRotation.UI.Hotkeys;
 
 namespace MilkVio.Tank.WAR;
 
@@ -30,6 +29,7 @@ public class WarriorRotation : IRotation
     public IRotationEventHandler GetEventHandler() => _eventHandler;
     
     // 管理该职业所有的决策解析器
+    private readonly List<IDecisionResolver> _alwaysResolvers = new();
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
     
@@ -81,66 +81,52 @@ public class WarriorRotation : IRotation
         foreach (var (name, def) in QtList)
             PromeSettings.Instance.AddQt(name, def);
         
-        // 画HotKey
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.猛攻, ActionType.OffGcd, ActionTargetType.Target)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.挑衅, ActionType.OffGcd, ActionTargetType.Target)));
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "退避ST",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.Enqueue(new PAction(WARSkill.退避, ActionType.OffGcd, ActionTargetType.PartyMember2), true);
-                               }),
-                               iconActionId: DRKSkill.退避, 
-                               customIconPath: "Resources/DRK/TBST.png" 
-                           ));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.原初的血气, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.战栗, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.铁壁, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.戮罪, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.亲疏自行, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.血仇, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.摆脱, ActionType.OffGcd, ActionTargetType.Self)));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "勇猛ST",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.Enqueue(new PAction(WARSkill.原初的勇猛, ActionType.OffGcd, ActionTargetType.PartyMember2), true);
-                               }),
-                               iconActionId: WARSkill.原初的勇猛, 
-                               customIconPath: "Resources/DRK/HDST.png" 
-                           ));
-        
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(WARSkill.守护, ActionType.OffGcd, ActionTargetType.Self)));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "同步镜头",
-                               new ToggleLogic(
-                                   getState: () => CameraSyncManager.CurrentMode == SyncMode.Camera, 
-                                   toggleAction: () => CameraSyncManager.ToggleCameraSync()
-                               ), 
-                               iconActionId: 11404
-                           ));
-
-        // [新增] 注册全新的“正方向校准”Hotkey
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "校准正方向",
-                               new ToggleLogic(
-                                   getState: () => CameraSyncManager.CurrentMode == SyncMode.Align, 
-                                   toggleAction: () => CameraSyncManager.ToggleAlignSync()
-                               ),
-                               customIconPath: "Resources/Align4.png"
-                           ));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "清扫队列",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.ClearAllQueues();
-                                   Svc.Chat.PrintError($"[PromeRotation] 清扫队列");
-                               }), 
-                               customIconPath: "Resources/Clear.png"
-                           ));
+        var hotkeyPanel = new HotkeyPanel(columns: 5, title: "WAR Hotkeys");
+        hotkeyPanel.AddHotkey("猛攻", new PAction(WARSkill.猛攻, ActionType.OffGcd, ActionTargetType.Target));
+        hotkeyPanel.AddHotkey("挑衅", new PAction(WARSkill.挑衅, ActionType.OffGcd, ActionTargetType.Target));
+        hotkeyPanel.AddHotkey(
+            "退避ST",
+            new ExecuteLogic(() =>
+                ActionQueueManager.Enqueue(
+                    new PAction(WARSkill.退避, ActionType.OffGcd, ActionTargetType.PartyMember2), true)),
+            iconActionId: DRKSkill.退避,
+            customIconPath: "Resources/DRK/TBST.png");
+        hotkeyPanel.AddHotkey("原初的血气", new PAction(WARSkill.原初的血气, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("战栗", new PAction(WARSkill.战栗, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("铁壁", new PAction(WARSkill.铁壁, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("戮罪", new PAction(WARSkill.戮罪, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("亲疏自行", new PAction(WARSkill.亲疏自行, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("血仇", new PAction(WARSkill.血仇, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("摆脱", new PAction(WARSkill.摆脱, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey(
+            "勇猛ST",
+            new ExecuteLogic(() =>
+                ActionQueueManager.Enqueue(
+                    new PAction(WARSkill.原初的勇猛, ActionType.OffGcd, ActionTargetType.PartyMember2), true)),
+            iconActionId: WARSkill.原初的勇猛,
+            customIconPath: "Resources/DRK/HDST.png");
+        hotkeyPanel.AddHotkey("守护", new PAction(WARSkill.守护, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey(
+            "同步镜头",
+            new ToggleLogic(
+                () => CameraSyncManager.CurrentMode == SyncMode.Camera,
+                CameraSyncManager.ToggleCameraSync),
+            iconActionId: 11404);
+        hotkeyPanel.AddHotkey(
+            "校准正方向",
+            new ToggleLogic(
+                () => CameraSyncManager.CurrentMode == SyncMode.Align,
+                CameraSyncManager.ToggleAlignSync),
+            customIconPath: "Resources/Align4.png");
+        hotkeyPanel.AddHotkey(
+            "清扫队列",
+            new ExecuteLogic(() =>
+            {
+                ActionQueueManager.ClearAllQueues();
+                Svc.Chat.PrintError("[PromeRotation] 清扫队列");
+            }),
+            customIconPath: "Resources/Clear.png");
+        HotkeyManager.Instance.AddHotkeyPanel(hotkeyPanel);
     }
     
     // 该职业的起手
@@ -188,6 +174,16 @@ public class WarriorRotation : IRotation
         return null;
     }
     
+    public PAction? NextAlways()
+    {
+        foreach (var resolver in _alwaysResolvers)
+        {
+            if (resolver.Check().Success)
+                return resolver.GetAction();
+        }
+        return null;
+    }
+
     public PAction? NextGcd()
     {
         // 遍历所有GCD解析器
@@ -219,8 +215,21 @@ public class WarriorRotation : IRotation
     public void UpdateDebugStatus()
     {
         // 清空上一帧的旧数据
+        RotationManager.AlwaysSolverStatus.Clear();
         RotationManager.GcdSolverStatus.Clear();
         RotationManager.OffGcdSolverStatus.Clear();
+
+        foreach (var resolver in _alwaysResolvers)
+        {
+            var result = resolver.Check();
+
+            RotationManager.AlwaysSolverStatus.Add(new SolverStatus
+            {
+                Name = resolver.GetType().Name,
+                Success = result.Success,
+                Message = result.Message
+            });
+        }
         
         // GCD状态列表
         foreach (var resolver in _gcdResolvers)

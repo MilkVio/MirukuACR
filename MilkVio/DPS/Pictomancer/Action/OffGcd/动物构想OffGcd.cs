@@ -1,4 +1,4 @@
-using PromeRotation.Core;
+﻿using PromeRotation.Core;
 using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Helpers;
@@ -22,7 +22,7 @@ public class 动物构想OffGcd : IDecisionResolver
         
         // 自身不可以执行的条件
         if (IsMutualExclusion()) return new CheckResult(false, "与当前动物炮互斥");
-        if (PCTSkill.动物构想.GetActionCharges() == 0) return new CheckResult(false, "未冷却");
+        if (PCTSkill.动物构想.GetActionCharges() < 1) return new CheckResult(false, "未冷却");
         
         // Qt控制
         if (!PromeSettings.Instance.GetQt(PCTQt.动物构想)) return new CheckResult(false, "未开启QT");

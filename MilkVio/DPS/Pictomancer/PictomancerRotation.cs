@@ -20,7 +20,6 @@ using MilkVio.DPS.UniversalData;
 using PromeRotation.Timeline;
 using PromeRotation.UI;
 using PromeRotation.UI.HotKey;
-using PromeRotation.UI.Hotkeys;
 using PromeRotation.Windows;
 using 锤子Gcd = MilkVio.DPS.Pictomancer.Action.Gcd.锤子Gcd;
 
@@ -34,6 +33,7 @@ public class PictomancerRotation : IRotation
     public IRotationEventHandler GetEventHandler() => _eventHandler;
     
     // 管理该职业所有的决策解析器
+    private readonly List<IDecisionResolver> _alwaysResolvers = new();
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
     
@@ -115,37 +115,30 @@ public class PictomancerRotation : IRotation
             PromeSettings.Instance.AddQt(name, def);
         
         
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(MageUniversalSkill.沉稳咏唱, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(MageUniversalSkill.混乱, ActionType.OffGcd, ActionTargetType.Target)));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "同步镜头",
-                               new ToggleLogic(
-                                   getState: () => CameraSyncManager.CurrentMode == SyncMode.Camera, 
-                                   toggleAction: () => CameraSyncManager.ToggleCameraSync()
-                               ), 
-                               iconActionId: 11404
-                           ));
-
-        // [新增] 注册全新的“正方向校准”Hotkey
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "校准正方向",
-                               new ToggleLogic(
-                                   getState: () => CameraSyncManager.CurrentMode == SyncMode.Align, 
-                                   toggleAction: () => CameraSyncManager.ToggleAlignSync()
-                               ),
-                               customIconPath: "Resources/Align4.png"
-                           ));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "清扫队列",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.ClearAllQueues();
-                                   Svc.Chat.PrintError($"[PromeRotation] 清扫队列");
-                               }), 
-                               customIconPath: "Resources/Clear.png"
-                           ));
+        var hotkeyPanel = new HotkeyPanel(columns: 5, title: "PCT Hotkeys");
+        hotkeyPanel.AddHotkey("沉稳咏唱", new PAction(MageUniversalSkill.沉稳咏唱, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("混乱", new PAction(MageUniversalSkill.混乱, ActionType.OffGcd, ActionTargetType.Target));
+        hotkeyPanel.AddHotkey(
+            "同步镜头",
+            new ToggleLogic(
+                () => CameraSyncManager.CurrentMode == SyncMode.Camera,
+                CameraSyncManager.ToggleCameraSync),
+            iconActionId: 11404);
+        hotkeyPanel.AddHotkey(
+            "校准正方向",
+            new ToggleLogic(
+                () => CameraSyncManager.CurrentMode == SyncMode.Align,
+                CameraSyncManager.ToggleAlignSync),
+            customIconPath: "Resources/Align4.png");
+        hotkeyPanel.AddHotkey(
+            "清扫队列",
+            new ExecuteLogic(() =>
+            {
+                ActionQueueManager.ClearAllQueues();
+                Svc.Chat.PrintError("[PromeRotation] 清扫队列");
+            }),
+            customIconPath: "Resources/Clear.png");
+        HotkeyManager.Instance.AddHotkeyPanel(hotkeyPanel);
     }
     
     // 该职业的起手
@@ -193,6 +186,16 @@ public class PictomancerRotation : IRotation
         return null;
     }
     
+    public PAction? NextAlways()
+    {
+        foreach (var resolver in _alwaysResolvers)
+        {
+            if (resolver.Check().Success)
+                return resolver.GetAction();
+        }
+        return null;
+    }
+
     public PAction? NextGcd()
     {
         // 遍历所有GCD解析器
@@ -224,8 +227,21 @@ public class PictomancerRotation : IRotation
     public void UpdateDebugStatus()
     {
         // 清空上一帧的旧数据
+        RotationManager.AlwaysSolverStatus.Clear();
         RotationManager.GcdSolverStatus.Clear();
         RotationManager.OffGcdSolverStatus.Clear();
+
+        foreach (var resolver in _alwaysResolvers)
+        {
+            var result = resolver.Check();
+
+            RotationManager.AlwaysSolverStatus.Add(new SolverStatus
+            {
+                Name = resolver.GetType().Name,
+                Success = result.Success,
+                Message = result.Message
+            });
+        }
         
         // GCD状态列表
         foreach (var resolver in _gcdResolvers)

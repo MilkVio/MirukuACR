@@ -18,7 +18,6 @@ using PromeRotation.Timeline;
 using PromeRotation.Timeline.Core;
 using PromeRotation.UI;
 using PromeRotation.UI.HotKey;
-using PromeRotation.UI.Hotkeys;
 using PromeRotation.Updaters;
 using PromeRotation.Windows;
 
@@ -32,6 +31,7 @@ public class NinjaRotation : IRotation
     public IRotationEventHandler GetEventHandler() => _eventHandler;
     
     // 管理该职业所有的决策解析器
+    private readonly List<IDecisionResolver> _alwaysResolvers = new();
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
     
@@ -105,43 +105,36 @@ public class NinjaRotation : IRotation
         foreach (var (name, def) in QtList)
             PromeSettings.Instance.AddQt(name, def);
         
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(MeleeUniversalSkill.牵制, ActionType.OffGcd,ActionTargetType.Target)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(MeleeUniversalSkill.真北, ActionType.OffGcd,ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(NinjaSkill.残影, ActionType.OffGcd,ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(3, ActionType.OffGcd,ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(MeleeUniversalSkill.亲疏自行, ActionType.OffGcd,ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(MeleeUniversalSkill.内丹, ActionType.OffGcd,ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(MeleeUniversalSkill.浴血, ActionType.OffGcd,ActionTargetType.Self)));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "同步镜头",
-                               new ToggleLogic(
-                                   getState: () => CameraSyncManager.CurrentMode == SyncMode.Camera, 
-                                   toggleAction: () => CameraSyncManager.ToggleCameraSync()
-                               ), 
-                               iconActionId: 11404
-                           ));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "校准正方向",
-                               new ToggleLogic(
-                                   getState: () => CameraSyncManager.CurrentMode == SyncMode.Align, 
-                                   toggleAction: () => CameraSyncManager.ToggleAlignSync()
-                               ),
-                               customIconPath: "Resources/Align4.png"
-                           ));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "清扫队列",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.ClearAllQueues();
-                                   ActionUpdater.Reset();
-                                   Svc.Chat.PrintError($"[PromeRotation] 清扫队列");
-                               }), 
-                               customIconPath: "Resources/Clear.png"
-                           ));
-        
+        var hotkeyPanel = new HotkeyPanel(columns: 5, title: "NIN Hotkeys");
+        hotkeyPanel.AddHotkey("牵制", new PAction(MeleeUniversalSkill.牵制, ActionType.OffGcd, ActionTargetType.Target));
+        hotkeyPanel.AddHotkey("真北", new PAction(MeleeUniversalSkill.真北, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("残影", new PAction(NinjaSkill.残影, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("疾跑", new PAction(3, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("亲疏自行", new PAction(MeleeUniversalSkill.亲疏自行, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("内丹", new PAction(MeleeUniversalSkill.内丹, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("浴血", new PAction(MeleeUniversalSkill.浴血, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey(
+            "同步镜头",
+            new ToggleLogic(
+                () => CameraSyncManager.CurrentMode == SyncMode.Camera,
+                CameraSyncManager.ToggleCameraSync),
+            iconActionId: 11404);
+        hotkeyPanel.AddHotkey(
+            "校准正方向",
+            new ToggleLogic(
+                () => CameraSyncManager.CurrentMode == SyncMode.Align,
+                CameraSyncManager.ToggleAlignSync),
+            customIconPath: "Resources/Align4.png");
+        hotkeyPanel.AddHotkey(
+            "清扫队列",
+            new ExecuteLogic(() =>
+            {
+                ActionQueueManager.ClearAllQueues();
+                ActionUpdater.Reset();
+                Svc.Chat.PrintError("[PromeRotation] 清扫队列");
+            }),
+            customIconPath: "Resources/Clear.png");
+        HotkeyManager.Instance.AddHotkeyPanel(hotkeyPanel);
     }
     
     // 该职业的起手
@@ -189,6 +182,16 @@ public class NinjaRotation : IRotation
         return null;
     }
     
+    public PAction? NextAlways()
+    {
+        foreach (var resolver in _alwaysResolvers)
+        {
+            if (resolver.Check().Success)
+                return resolver.GetAction();
+        }
+        return null;
+    }
+
     public PAction? NextGcd()
     {
         // 遍历所有GCD解析器
@@ -220,8 +223,21 @@ public class NinjaRotation : IRotation
     public void UpdateDebugStatus()
     {
         // 清空上一帧的旧数据
+        RotationManager.AlwaysSolverStatus.Clear();
         RotationManager.GcdSolverStatus.Clear();
         RotationManager.OffGcdSolverStatus.Clear();
+
+        foreach (var resolver in _alwaysResolvers)
+        {
+            var result = resolver.Check();
+
+            RotationManager.AlwaysSolverStatus.Add(new SolverStatus
+            {
+                Name = resolver.GetType().Name,
+                Success = result.Success,
+                Message = result.Message
+            });
+        }
         
         // GCD状态列表
         foreach (var resolver in _gcdResolvers)

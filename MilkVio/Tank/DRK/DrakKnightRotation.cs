@@ -21,7 +21,6 @@ using PromeRotation.Timeline;
 using PromeRotation.Timeline.Core;
 using PromeRotation.UI;
 using PromeRotation.UI.HotKey;
-using PromeRotation.UI.Hotkeys;
 using PromeRotation.Windows;
 
 namespace MilkVio.Tank.DRK;
@@ -35,6 +34,7 @@ public class DrakKnightRotation : IRotation, IRotationMeta
     public IRotationEventHandler GetEventHandler() => eventHandler;
     
     // 管理该职业所有的决策解析器
+    private readonly List<IDecisionResolver> _alwaysResolvers = new();
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
     
@@ -98,77 +98,61 @@ public class DrakKnightRotation : IRotation, IRotationMeta
         foreach (var (name, def) in QtList)
             PromeSettings.Instance.AddQt(name, def);
         
-        // 画HotKey
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.暗影步, ActionType.OffGcd, ActionTargetType.Target)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.挑衅, ActionType.OffGcd, ActionTargetType.Target)));
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "退避ST",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.Enqueue(new PAction(DRKSkill.退避, ActionType.OffGcd, ActionTargetType.PartyMember2), true);
-                               }),
-                               iconActionId: DRKSkill.退避, 
-                               customIconPath: "Resources/DRK/TBST.png" 
-                           ));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.至黑之夜, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.弃明投暗, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.铁壁, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.暗影卫, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.献奉, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.亲疏自行, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.血仇, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.暗黑布道, ActionType.OffGcd, ActionTargetType.Self)));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "黑盾ST",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.Enqueue(new PAction(DRKSkill.至黑之夜, ActionType.OffGcd, ActionTargetType.PartyMember2), true);
-                               }),
-                               iconActionId: DRKSkill.至黑之夜, 
-                               customIconPath: "Resources/DRK/HDST.png" 
-                           ));
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "奉献ST",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.Enqueue(new PAction(DRKSkill.献奉, ActionType.OffGcd, ActionTargetType.PartyMember2), true);
-                               }),
-                               iconActionId: DRKSkill.献奉, 
-                               customIconPath: "Resources/DRK/XFST.png" 
-                           ));
-        
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.深恶痛绝, ActionType.OffGcd, ActionTargetType.Self)));
-        HotkeyUI.AddHotkey(new ActionHotkey(new PAction(DRKSkill.解除深恶痛绝, ActionType.OffGcd, ActionTargetType.Self)));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "同步镜头",
-                               new ToggleLogic(
-                                   getState: () => CameraSyncManager.CurrentMode == SyncMode.Camera, 
-                                   toggleAction: () => CameraSyncManager.ToggleCameraSync()
-                               ), 
-                               iconActionId: 11404
-                           ));
-
-        // [新增] 注册全新的“正方向校准”Hotkey
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "校准正方向",
-                               new ToggleLogic(
-                                   getState: () => CameraSyncManager.CurrentMode == SyncMode.Align, 
-                                   toggleAction: () => CameraSyncManager.ToggleAlignSync()
-                               ),
-                               customIconPath: "Resources/Align4.png"
-                           ));
-        
-        HotkeyUI.AddHotkey(new DelegateHotkey(
-                               "清扫队列",
-                               new ExecuteLogic(() => 
-                               {
-                                   ActionQueueManager.ClearAllQueues();
-                                   Svc.Chat.PrintError($"[PromeRotation] 清扫队列");
-                               }), 
-                               customIconPath: "Resources/Clear.png"
-                           ));
+        var hotkeyPanel = new HotkeyPanel(columns: 5, title: "DRK Hotkeys");
+        hotkeyPanel.AddHotkey("暗影步", new PAction(DRKSkill.暗影步, ActionType.OffGcd, ActionTargetType.Target));
+        hotkeyPanel.AddHotkey("挑衅", new PAction(DRKSkill.挑衅, ActionType.OffGcd, ActionTargetType.Target));
+        hotkeyPanel.AddHotkey(
+            "退避ST",
+            new ExecuteLogic(() =>
+                ActionQueueManager.Enqueue(
+                    new PAction(DRKSkill.退避, ActionType.OffGcd, ActionTargetType.PartyMember2), true)),
+            iconActionId: DRKSkill.退避,
+            customIconPath: "Resources/DRK/TBST.png");
+        hotkeyPanel.AddHotkey("至黑之夜", new PAction(DRKSkill.至黑之夜, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("弃明投暗", new PAction(DRKSkill.弃明投暗, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("铁壁", new PAction(DRKSkill.铁壁, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("暗影卫", new PAction(DRKSkill.暗影卫, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("献奉", new PAction(DRKSkill.献奉, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("亲疏自行", new PAction(DRKSkill.亲疏自行, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("血仇", new PAction(DRKSkill.血仇, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("暗黑布道", new PAction(DRKSkill.暗黑布道, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey(
+            "黑盾ST",
+            new ExecuteLogic(() =>
+                ActionQueueManager.Enqueue(
+                    new PAction(DRKSkill.至黑之夜, ActionType.OffGcd, ActionTargetType.PartyMember2), true)),
+            iconActionId: DRKSkill.至黑之夜,
+            customIconPath: "Resources/DRK/HDST.png");
+        hotkeyPanel.AddHotkey(
+            "奉献ST",
+            new ExecuteLogic(() =>
+                ActionQueueManager.Enqueue(
+                    new PAction(DRKSkill.献奉, ActionType.OffGcd, ActionTargetType.PartyMember2), true)),
+            iconActionId: DRKSkill.献奉,
+            customIconPath: "Resources/DRK/XFST.png");
+        hotkeyPanel.AddHotkey("深恶痛绝", new PAction(DRKSkill.深恶痛绝, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey("解除深恶痛绝", new PAction(DRKSkill.解除深恶痛绝, ActionType.OffGcd, ActionTargetType.Self));
+        hotkeyPanel.AddHotkey(
+            "同步镜头",
+            new ToggleLogic(
+                () => CameraSyncManager.CurrentMode == SyncMode.Camera,
+                CameraSyncManager.ToggleCameraSync),
+            iconActionId: 11404);
+        hotkeyPanel.AddHotkey(
+            "校准正方向",
+            new ToggleLogic(
+                () => CameraSyncManager.CurrentMode == SyncMode.Align,
+                CameraSyncManager.ToggleAlignSync),
+            customIconPath: "Resources/Align4.png");
+        hotkeyPanel.AddHotkey(
+            "清扫队列",
+            new ExecuteLogic(() =>
+            {
+                ActionQueueManager.ClearAllQueues();
+                Svc.Chat.PrintError("[PromeRotation] 清扫队列");
+            }),
+            customIconPath: "Resources/Clear.png");
+        HotkeyManager.Instance.AddHotkeyPanel(hotkeyPanel);
         
         
         // todo
@@ -220,6 +204,16 @@ public class DrakKnightRotation : IRotation, IRotationMeta
         return null;
     }
     
+    public PAction? NextAlways()
+    {
+        foreach (var resolver in _alwaysResolvers)
+        {
+            if (resolver.Check().Success)
+                return resolver.GetAction();
+        }
+        return null;
+    }
+
     public PAction? NextGcd()
     {
         // 遍历所有GCD解析器
@@ -251,8 +245,21 @@ public class DrakKnightRotation : IRotation, IRotationMeta
     public void UpdateDebugStatus()
     {
         // 清空上一帧的旧数据
+        RotationManager.AlwaysSolverStatus.Clear();
         RotationManager.GcdSolverStatus.Clear();
         RotationManager.OffGcdSolverStatus.Clear();
+
+        foreach (var resolver in _alwaysResolvers)
+        {
+            var result = resolver.Check();
+
+            RotationManager.AlwaysSolverStatus.Add(new SolverStatus
+            {
+                Name = resolver.GetType().Name,
+                Success = result.Success,
+                Message = result.Message
+            });
+        }
         
         // GCD状态列表
         foreach (var resolver in _gcdResolvers)
