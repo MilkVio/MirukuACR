@@ -13,6 +13,7 @@ using MilkVio.Tank.PLD.Action.Gcd;
 using MilkVio.Tank.PLD.Action.OffGcd;
 using MilkVio.Tank.PLD.Opener;
 using MilkVio.Tank.PLD.PLDData;
+using PromeRotation.Helpers;
 using PromeRotation.Timeline;
 using PromeRotation.Timeline.Core;
 using PromeRotation.UI;
@@ -286,6 +287,8 @@ public class PaladinRotation : IRotation
     {
         ImGui.Text(Core.Me.HasStatus(PLDBuff.战逃反应buff).ToString());
         ImGui.Text(PLDSkill.调停.GetActionCharges().ToString());
+        ImGui.Text(ActionHelper.ResolveActionType(PLDSkill.先锋剑).ToString());
+        ImGui.Text(ActionHelper.ResolveActionType(PLDSkill.调停).ToString());
     }
     
     private void DrawDev()
