@@ -1,48 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
     <AssemblyName>MilkVio.ACR</AssemblyName>
     <RootNamespace>MilkVio</RootNamespace>
-    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <OutputPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\pluginConfigs\PromeRotation\ACR\MilkVio</OutputPath>
+
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+    <OutputPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\pluginConfigs\PromeRotation\ACR\MilkVio</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="Dalamud">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\Dalamud.dll</HintPath>
+      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\Dalamud.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Dalamud.Bindings.ImGui">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\Dalamud.Bindings.ImGui.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+
     <Reference Include="ECommons">
-      <HintPath>D:\.Dev\.PromeRotation\PromeRotation\bin\x64\Debug\ECommons.dll</HintPath>
+      <HintPath>D:\.Dev\TCAsset\ECommons.dll</HintPath>
       <Private>false</Private>
     </Reference>
+
     <Reference Include="FFXIVClientStructs">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\FFXIVClientStructs.dll</HintPath>
+      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\FFXIVClientStructs.dll</HintPath>
       <Private>false</Private>
     </Reference>
+
+    <Reference Include="ImGui.NET">
+      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\ImGui.NET.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
     <Reference Include="InteropGenerator.Runtime">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\InteropGenerator.Runtime.dll</HintPath>
+      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\InteropGenerator.Runtime.dll</HintPath>
       <Private>false</Private>
     </Reference>
+
     <Reference Include="Lumina">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\Lumina.dll</HintPath>
+      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\Lumina.dll</HintPath>
       <Private>false</Private>
     </Reference>
+
     <Reference Include="Lumina.Excel">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherCN\addon\Hooks\dev\Lumina.Excel.dll</HintPath>
+      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\Lumina.Excel.dll</HintPath>
       <Private>false</Private>
     </Reference>
+
     <Reference Include="PromeRotation">
-      <HintPath>D:\.Dev\.PromeRotation\PromeRotation\bin\x64\Debug\PromeRotation.dll</HintPath>
+      <HintPath>D:\.Dev\.PromeRotation-TC\PromeRotation\bin\x64\Debug\net9.0-windows\PromeRotation.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

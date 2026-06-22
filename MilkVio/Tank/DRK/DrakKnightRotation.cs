@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using Dalamud.Bindings.ImGui;
+using ImGuiNET;
 using Dalamud.Game.ClientState.JobGauge.Enums;
 using ECommons.DalamudServices;
 using ECommons.ExcelServices;
@@ -324,14 +324,6 @@ public class DrakKnightRotation : IRotation, IRotationMeta
         
         var iconTexture = DRKSkill.伤残.GetActionIcon();
         //var jocbic = IconHelper.GetActionIcon(62132);
-        if (iconTexture != null)
-        {
-            ImGui.Image(iconTexture.Handle, new Vector2(40, 40));
-        }
-        else
-        {
-            ImGui.Text($"Icon not found!");
-        } 
     }
     
 }
