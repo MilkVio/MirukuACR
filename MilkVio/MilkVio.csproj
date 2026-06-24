@@ -11,16 +11,19 @@
     <AssemblyName>MilkVio.ACR</AssemblyName>
     <RootNamespace>MilkVio</RootNamespace>
 
-    <!-- SDK 中的 DLL 只用于编译，不复制到 ACR 输出目录 -->
+    <!-- NuGet SDK 中的 DLL 只用于编译，不复制到 ACR 输出目录 -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
 
-    <OutputPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\pluginConfigs\PromeRotation\ACR\MilkVio</OutputPath>
+    <!-- 本地编译时直接部署到繁中服 ACR 目录 -->
+    <OutputPath>$(APPDATA)\XIVLauncherTC\pluginConfigs\PromeRotation\ACR\MilkVio\</OutputPath>
+
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="PromeRotation.SDK.API12" Version="0.1.0-preview.2" />
+    <PackageReference Include="PromeRotation.SDK.API12"
+                      Version="0.1.0-preview.2" />
   </ItemGroup>
 
 </Project>

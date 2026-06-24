@@ -2,3 +2,17 @@
 **/bin/
 **/obj/
 
+# NuGet cache (used by GitHub Actions CI)
+.nuget/
+
+# User-local build overrides
+*.user
+Directory.Build.props.user
+
+# IDE
+.idea/
+.vs/
+
+# Temp
+.tmp-*/
+
