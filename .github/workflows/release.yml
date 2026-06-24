@@ -110,15 +110,23 @@ jobs:
           # 匹配 public const string Version = "..."
           $pattern = '(public const string Version\s*=\s*")[^"]+(")'
           $regex = [regex]::new($pattern)
-          $updated = $regex.Replace($text, '${1}' + $version + '${2}', 1)
+          $match = $regex.Match($text)
 
-          if ($updated -eq $text) {
+          if (-not $match.Success) {
             throw "Could not find version constant in $path."
           }
 
-          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-          [System.IO.File]::WriteAllText($path, $updated, $utf8NoBom)
-          Write-Host "GlobalVersion.cs version updated to $version"
+          $currentVersion = $match.Groups[0].Value
+          $updated = $regex.Replace($text, '${1}' + $version + '${2}', 1)
+
+          if ($updated -eq $text) {
+            Write-Host "GlobalVersion.cs is already set to $version; no change required."
+          }
+          else {
+            $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+            [System.IO.File]::WriteAllText($path, $updated, $utf8NoBom)
+            Write-Host "GlobalVersion.cs version updated to $version"
+          }
 
       # ---------- 编译 ----------
       - name: Build
