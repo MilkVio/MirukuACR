@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -10,52 +11,16 @@
     <AssemblyName>MilkVio.ACR</AssemblyName>
     <RootNamespace>MilkVio</RootNamespace>
 
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- SDK 中的 DLL 只用于编译，不复制到 ACR 输出目录 -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
 
     <OutputPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\pluginConfigs\PromeRotation\ACR\MilkVio</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="Dalamud">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\Dalamud.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="ECommons">
-      <HintPath>D:\.Dev\TCAsset\ECommons.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="FFXIVClientStructs">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\FFXIVClientStructs.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="ImGui.NET">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\ImGui.NET.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="InteropGenerator.Runtime">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\InteropGenerator.Runtime.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="Lumina">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\Lumina.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="Lumina.Excel">
-      <HintPath>C:\Users\Vio\AppData\Roaming\XIVLauncherTC\addon\Hooks\dev\Lumina.Excel.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="PromeRotation">
-      <HintPath>D:\.Dev\.PromeRotation-TC\PromeRotation\bin\x64\Debug\net9.0-windows\PromeRotation.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+    <PackageReference Include="PromeRotation.SDK.API12" Version="0.1.0-preview.2" />
   </ItemGroup>
 
 </Project>
