@@ -21,7 +21,7 @@ env:
   NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
   # ---------- 作者请在这里维护以下信息 ----------
   ACR_AUTHOR: MilkVio
-  ACR_DESCRIPTION: MilkVio 全职业 ACR for PromeRotation API12 TC
+  ACR_DESCRIPTION: 这是一个官方临时的高难ACR包，学者占星贤者由RyougiS制作，时间繁忙暂时合并为一个。待社区ACR优秀发展后将被替换。
   ACR_API_VERSION: "12"
   ACR_SPONSOR_URL: "https://afdian.com/a/PromeRotation"
 

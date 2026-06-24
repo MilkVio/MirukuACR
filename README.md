@@ -1,79 +1,54 @@
-# MilkVio ACR for PromeRotation API12 (TC)
+# MirukuACR
 
-MilkVio 全职业 ACR，基于 PromeRotation API12 繁中服。
+适用于 **PromeRotation API12 繁中服**的高难内容 ACR包。
 
-## 支持职业
+本项目是 PromeRotation 主开发暂时维护的一套高难 ACR。由于目前精力有限，**RyougiS做的奶妈**暂时合并在同一个ACR包中统一发布。
 
-| 职能 | 职业 |
-|---|---|
-| Tank | PLD, WAR, DRK, GNB |
-| Healer | WHM, SCH, AST, SGE |
-| Melee DPS | MNK, DRG, NIN, SAM, RPR, VPR |
-| Ranged DPS | MCH, DNC |
-| Caster DPS | SMN, RDM, PCT |
+待社区 ACR 生态逐渐成熟、出现更多优秀且维护稳定的ACR后，本整合包中的对应职业将逐步由社区 ACR 替代。
 
-## 开发 / 编译
+## 作者与鸣谢
 
-### 依赖
+本项目中的以下三个治疗职业由 **[RyougiS](https://github.com/a16239438)** 制作：
 
-本项目通过 NuGet 引用编译期 SDK：
+* 学者（SCH）
+* 占星术士（AST）
+* 贤者（SGE）
 
-```xml
-<PackageReference Include="PromeRotation.SDK.API12" Version="0.1.0-preview.2" />
-```
+其余职业由 **MilkVio** 制作与维护。
 
-**不再需要**手动下载 Dalamud DLL 或提交 `lib/` 目录下的编译引用 DLL。`dotnet restore` 会自动恢复所有编译引用。
+## 当前支持职业
 
-### 本地编译
+| 职能     | 职业                                         |
+| ------ | ------------------------------------------ |
+| 防护职业   | 骑士（PLD）、战士（WAR）、暗黑骑士（DRK）                  |
+| 治疗职业   | 白魔法师（WHM）、学者（SCH）、占星术士（AST）、贤者（SGE）        |
+| 近战职业   | 武僧（MNK）、龙骑士（DRG）、忍者（NIN）、武士（SAM）、蝰蛇剑士（VPR） |
+| 远程物理职业 | 机工士（MCH）、舞者（DNC）                           |
+| 远程魔法职业 | 召唤师（SMN）、赤魔法师（RDM）、绘灵法师（PCT）               |
 
-```powershell
-dotnet restore MilkVio\MilkVio.csproj
-dotnet build MilkVio\MilkVio.csproj -c Release
-```
+不同职业的完成度、适用副本和维护状态可能存在差异，请以游戏内实际显示和最新发布说明为准。
 
-如需直接输出到本地 XIVLauncherTC ACR 目录，可通过 `-p:OutputPath=` 覆盖：
+但是基本不支持AOE lol
 
-```powershell
-dotnet build MilkVio\MilkVio.csproj -c Release -p:OutputPath="C:\Users\<你的用户名>\AppData\Roaming\XIVLauncherTC\pluginConfigs\PromeRotation\ACR\MilkVio"
-```
+## 安装方式
 
-或者创建 gitignored 的 `Directory.Build.props.user` 文件设置本地路径。
+目前插件自带
 
-### 更新 SDK 版本
+## 项目定位
 
-1. 修改 `MilkVio\MilkVio.csproj` 中的 `PromeRotation.SDK.API12` 版本号
-2. **先提交 SDK 版本变更**（不要与发布 Tag 混在同一个提交里）
-3. 确认 NuGet 能成功恢复后，再创建发布 Tag
+本项目属于临时的官方整合方案，由于PR社区刚刚兴起，各个作者的ACR都需要测试，所以这里先暂时放一个主开发稳定测试了几个月的ACR，用于填补暂时的社区需求，并不是计划长期垄断或替代社区作品。
 
-不推荐使用浮动版本（`*` / `0.1.0-preview.*`）。始终固定为具体版本号。
+我们欢迎开发者为 PromeRotation 制作独立 ACR。未来如果某个职业已经存在质量优秀、维护稳定且体验更好的社区 ACR，本项目将考虑停止维护对应职业，并优先推荐社区作品。
 
-## 自动发布
+## 问题反馈
 
-推送以 `v` 开头的版本 Tag 即可触发 GitHub Actions 自动构建发布：
+遇到技能逻辑、职业设置、加载失败或版本兼容问题时，可以通过本仓库的 Issues 提交反馈。
 
-```powershell
-git tag v1.5.2.0
-git push origin v1.5.2.0
-```
+反馈时建议附上：
 
-也可以在 GitHub Actions 页面手动触发（`workflow_dispatch`），输入版本号。
-
-发布流程：
-1. 检出对应提交
-2. 安装 .NET 9
-3. NuGet 恢复（自动获取 `PromeRotation.SDK.API12`）
-4. 自动读取 `PromeRotation.dll` 程序集版本作为 `referencePromeVersion`
-5. 同步 `GlobalVersion.cs` 中的版本号
-6. 编译 ACR
-7. 打包为 `latest.zip`
-8. 计算 SHA256
-9. 生成 `repo.json`
-10. 创建 GitHub Release
-
-## repo.json 使用
-
-将以下链接填入 PromeRotation 远程 ACR 配置界面：
-
-```
-https://github.com/MilkVio/MirukuACR/releases/latest/download/repo.json
-```
+* 使用职业
+* PromeRotation 版本
+* ACR 版本
+* 出现问题的副本或战斗场景
+* 相关错误日志或截图
+* 问题发生前后的具体操作
