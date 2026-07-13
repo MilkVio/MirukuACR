@@ -296,6 +296,11 @@ public class NinjaRotation : IRotation
     private void DrawDev()
     {
         ImGui.Text($"{NinjaHelper.GetCurrentNinjaNinjyutsuCharge().ToString()}");
+
+        if (ImGui.Button("水遁"))
+        {
+            ActionQueueManager.Enqueue(NinjaHelper.NinjaNinjyutsu.水遁);
+        }
     }
     
 }
