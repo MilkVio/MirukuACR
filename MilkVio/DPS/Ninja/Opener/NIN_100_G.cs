@@ -48,13 +48,13 @@ public class NIN_100_G : IOpener
     // 倒计时 起手
     public void InitializeCountdown(CountDownHandler countdownHandler)
     {
-        var 天 = new PAction(NinjaSkill.天之印, ActionType.Gcd, ActionTargetType.Self);
-        var 地 = new PAction(NinjaSkill.地之印派生, ActionType.Gcd, ActionTargetType.Self);
-        var 人 = new PAction(NinjaSkill.人之印派生, ActionType.Gcd, ActionTargetType.Self);
+        var 天 = new PAction(NinjaSkill.天之印, ActionType.OffGcd, ActionTargetType.Self);
+        var 地 = new PAction(NinjaSkill.地之印派生, ActionType.OffGcd, ActionTargetType.Self);
+        var 人 = new PAction(NinjaSkill.人之印派生, ActionType.OffGcd, ActionTargetType.Self);
         var 水遁 =  new PAction(NinjaSkill.忍术, ActionType.Gcd, ActionTargetType.Target);
         countdownHandler.AddAction(5000, 天);
-        countdownHandler.AddAction(4450, 地);
-        countdownHandler.AddAction(3900, 人);
+        countdownHandler.AddAction(4500, 地);
+        countdownHandler.AddAction(4000, 人);
         countdownHandler.AddAction(700,水遁);
     }
 }

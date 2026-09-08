@@ -8,7 +8,10 @@ namespace MilkVio.DPS.Reaper
     {
         public void OnUpdate()
         {
-
+            ReaperBattleData.Instance.AutoSoulsow.Tick();
+            ReaperBattleData.Instance.DmuOpener.Tick();
+            ReaperRotation.UpdatePlanner();
+            ReaperRotation.UpdateDebugLog();
         }
 
         public void OnOutOfBattleUpdate()
@@ -18,7 +21,9 @@ namespace MilkVio.DPS.Reaper
 
         public void OnBattleStarted()
         {
-
+            ReaperBattleData.Instance.AutoSoulsow.Cancel();
+            ReaperBattleData.Instance.DebugLog.CombatStarted(Environment.TickCount64);
+            ReaperRotation.UpdateDebugLog();
         }
 
         public void OnBattleUpdate()
@@ -35,12 +40,14 @@ namespace MilkVio.DPS.Reaper
 
         public void OnBattleEnded()
         {
+            ReaperBattleData.Instance.DebugLog.CombatEnded(Environment.TickCount64, "战斗结束");
             ReaperBattleData.Instance.Reset();
             PromeSettings.Instance.OpenerHasBeenExecuted = false;
         }
 
         public void OnTerritoryChanged(ushort territoryId)
         {
+            ReaperBattleData.Instance.DebugLog.CombatEnded(Environment.TickCount64, $"切换地图{territoryId}");
             ReaperBattleData.Instance.Reset();
             PromeSettings.Instance.OpenerHasBeenExecuted = false;
         }

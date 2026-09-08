@@ -4,7 +4,6 @@ using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Reaper.ReaperData;
-using MilkVio.DPS.Viper.ViperData;
 
 namespace MilkVio.DPS.Reaper.Action.Gcd;
 
@@ -25,10 +24,7 @@ public class 基础连击Gcd : IDecisionResolver
 
     public PAction GetAction()
     {
-        if (ActionHelper.IsActionHighlighted(ReaperSkill.增盈切割))
-            return new PAction(ReaperSkill.增盈切割, ActionType.Gcd, ActionTargetType.Target);
-        if (ActionHelper.IsActionHighlighted(ReaperSkill.地狱切割))
-            return new PAction(ReaperSkill.地狱切割, ActionType.Gcd, ActionTargetType.Target);
-        return new PAction(ReaperSkill.切割, ActionType.Gcd, ActionTargetType.Target);
+        var next = ReaperHelper.下一段连击();
+        return new PAction(next != 0 ? next : ReaperSkill.切割, ActionType.Gcd, ActionTargetType.Target);
     }
 }

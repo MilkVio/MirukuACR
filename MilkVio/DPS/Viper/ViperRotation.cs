@@ -15,6 +15,7 @@ using MilkVio.DPS.Viper.Action.OffGcd;
 using MilkVio.DPS.Viper.Opener;
 using MilkVio.DPS.Viper.ViperData;
 using PromeRotation.Timeline;
+using PromeRotation.Timeline.Core;
 using PromeRotation.UI;
 using PromeRotation.UI.HotKey;
 using PromeRotation.Updaters;
@@ -55,8 +56,11 @@ public class ViperRotation : IRotation
         {"蝰蛇80级通用起手", typeof(VPR_80_G)},
         {"蝰蛇90级通用起手", typeof(VPR_90_G)},
         {"蝰蛇100级通用起手", typeof(VPR_100_G)},
-        {"蝰蛇100级伊甸起手", typeof(VPR_100_FRU)}
+        {"蝰蛇100级伊甸起手", typeof(VPR_100_FRU)},
+        {"蝰蛇100级妖星起手", typeof(VPR_100_DMU)}
     };
+
+    public static IJobNodeProvider? NodeProvider { get; } = new ViperJobNodeProvider();
 
     public ViperRotation()
     {
@@ -227,6 +231,17 @@ public class ViperRotation : IRotation
 
     private void DrawDev()
     {
+        if (ImGui.Button("15G 三插测试##ViperEnqueue15G"))
+        {
+            ActionQueueManager.Enqueue(new List<PAction>
+            {
+                new PAction(34633, ActionType.Gcd, ActionTargetType.Target),
+                new PAction(34644, ActionType.OffGcd, ActionTargetType.Target),
+                new PAction(34645, ActionType.OffGcd, ActionTargetType.Target),
+                new PAction(7549, ActionType.OffGcd, ActionTargetType.Target),
+            }, isHighPriority: true);
+        }
+
         ImGui.Text($"ComboLeft: {ActionHelper.GetComboLeftTime()}");
         ImGui.Text($"飞蛇之魂层数: {JobGaugeHelper.VPR.飞蛇之魂层数}");
         ImGui.Text($"灵力值: {JobGaugeHelper.VPR.灵力值}");

@@ -24,7 +24,7 @@ public static class ReaperSkill
     public const uint 播魂种 = 24387;      // 90 级，5 秒读条，获得播魂种 buff 2594，GCD
     public const uint 收获月 = 24388;      // GCD
 
-    public const uint 隐匿切割 = 24389;    // 消耗 50 蓝，给妖异之镰 buff 2587，OffGCD
+    public const uint 隐匿挥割 = 24389;    // 消耗 50 蓝，给妖异之镰 buff 2587，OffGCD
     public const uint 绞决爪 = 24390;      // 使用缢杀后，隐匿切割变化而来，GCD
     public const uint 缢杀爪 = 24391;      // 使用绞决后，隐匿切割变化而来，GCD
 
@@ -36,8 +36,9 @@ public static class ReaperSkill
     public const uint 交错收割 = 24396;    // GCD
     public const uint 团契 = 24398;        // 90 级，GCD；使用后会直接结束 buff 2593
 
-    public const uint 夜游魂收割 = 24399;  // 90 级，OffGCD
+    public const uint 夜游魂切割 = 24399;  // 90 级，OffGCD
     public const uint 夜游魂钐割 = 24400;  // 90 级，AOE 版本，OffGCD
+    public const uint 地狱入境 = 24401;
 
     public const uint 神秘纹 = 24404;      // 自保，OffGCD
     public const uint 神秘环 = 24405;      // 团辅，OffGCD
@@ -47,4 +48,5 @@ public static class ReaperSkill
     public const uint 绞决处刑 = 36971;    // 100 级，侧身位，GCD
     public const uint 断首处刑 = 36972;    // 100 级，上面两个的 AOE 版本，GCD
     public const uint 完人 = 36973;        // 100 级，GCD
+    
 }
