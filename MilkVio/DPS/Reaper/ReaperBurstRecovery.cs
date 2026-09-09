@@ -36,8 +36,6 @@ internal static class ReaperBurstRecovery
         var free = s.FreeEnshroud > 0 && s.Perfectio <= 0;
         if (!free && !HarvestNextGcd(s)) return false;
         if (!s.WindowActive) return true;
-        if (s.Soul < s.GoalSoul || s.Shroud < s.GoalShroud) return false;
-
         // 自己的神秘环结束不是输出截止；只有真实窗口不足时才比较眼前几招。
         var firstReap = free ? s.GcdLeft + (s.GcdLeft > 0.65f ? 0 : s.Gcd) : HarvestAt(s) + s.Gcd;
         var enshroudAt = Math.Max(s.EnshroudCd, Math.Max(0, 0.65f - s.GcdElapsed));

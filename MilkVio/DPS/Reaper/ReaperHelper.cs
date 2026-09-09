@@ -134,13 +134,14 @@ public static class ReaperHelper
         if (me == null) return false;
         var gcd = 普通Gcd;
         if (需要续连击(gcd)) return true;
+        var state = ReaperState.Read();
 
         if (PromeSettings.Instance.GetQt(ReaperQt.附体)
             && ActionHelper.IsActionAvailableByLevelAndQuest(ReaperSkill.夜游魂衣)
             && ReaperSkill.夜游魂衣.GetActionCooldown() <= 0
             && 可用附体层数() > 0
             && !me.HasStatus(ReaperBuff.完人预备Buff)
-            && 需要续连击(单附体占用时间())) return true;
+            && state.ComboAtRisk(ReaperResources.EnshroudComboDelay(state))) return true;
 
         return PromeSettings.Instance.GetQt(ReaperQt.暴食)
             && ActionHelper.IsActionAvailableByLevelAndQuest(ReaperSkill.暴食)

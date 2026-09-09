@@ -32,7 +32,8 @@ public sealed class ReaperProjection
 
     public Advice? Choose(ReaperBurstPlanner planner, ReaperState s, uint gcd, uint off, bool evaluate)
     {
-        if (!planner.IsPlanned && ReaperBurstRecovery.PrioritizeHarvestReward(s))
+        var harvestPriority = !planner.IsPlanned && ReaperBurstRecovery.PrioritizeHarvestReward(s);
+        if (harvestPriority && (!s.WindowActive || s.GoalSoul == 0 && s.GoalShroud == 0))
         {
             // 已解锁的爆发奖励按基础规划兑现，不为自己团辅末尾的一格填充延后整条链。
             Clear();
@@ -140,7 +141,8 @@ public sealed class ReaperProjection
             var a = Deficit(s, result.End); var b = Deficit(s, best.End);
             var reserveOrder = Math.Abs(a.Worst - b.Worst) > .001f ? a.Worst.CompareTo(b.Worst)
                 : Math.Abs(a.Total - b.Total) > .001f ? a.Total.CompareTo(b.Total) : 0;
-            if (reserveOrder < 0 || reserveOrder == 0 && (burst ? BetterBurst(result, best) : Better(s, result, best)))
+            // 免费链不按当前红绿拦截；只有名义截止的资源缺口更少时才改变这次衔接。
+            if (reserveOrder < 0 || reserveOrder == 0 && !harvestPriority && (burst ? BetterBurst(result, best) : Better(s, result, best)))
             { best = result; selected = id; selectedRoute = route; }
         }
         Debug = detail.ToString();
@@ -246,7 +248,7 @@ public sealed class ReaperProjection
     internal static bool CanUse(ReaperState s, uint id, bool off) => id switch
     {
         0 => off,
-        ReaperSkill.夜游魂衣 => s.CanEnshroud && s.Melee && !s.ComboAtRisk(s.SingleDuration),
+        ReaperSkill.夜游魂衣 => s.CanEnshroud && s.Melee && !s.ComboAtRisk(ReaperResources.EnshroudComboDelay(s)),
         ReaperSkill.暴食 => s.GluttonyQt && s.GluttonyCd <= 0.001f && s.Soul >= 50 && !s.Locked && s.Distance <= 25 && !s.ComboAtRisk(2 * s.Gcd),
         ReaperSkill.隐匿挥割 => s.BloodQt && s.Soul >= 50 && !s.Locked && s.Melee && !s.ComboAtRisk(s.Gcd),
         ReaperSkill.神秘环 => s.CircleQt && s.CircleCd <= 0.001f,
@@ -255,7 +257,7 @@ public sealed class ReaperProjection
         ReaperSkill.灵魂切割 => s.SliceQt && !s.Locked && s.Melee && s.SliceCharges >= 0.999f,
         ReaperSkill.死亡之影 => s.DotQt && s.Reavers == 0 && s.Melee,
         ReaperSkill.大丰收 => s.CanHarvest && (s.IsDump || s.EnshroudQt || s.SacrificeLeft <= Math.Max(3, s.Gcd + 1)),
-        ReaperSkill.完人 => s.Perfectio > 0 && !s.Locked && s.Distance <= 25,
+        ReaperSkill.完人 => ReaperResources.AllowsPerfectio(s),
         ReaperSkill.收获月 => ReaperResources.AllowsHarvestMoon(s),
         ReaperSkill.缢杀 => s.Reavers > 0 && s.Melee,
         ReaperSkill.虚无收割 or ReaperSkill.交错收割 => s.Enshrouded > 0 && s.Lemure > 1 && s.Melee,

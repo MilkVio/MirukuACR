@@ -1,3 +1,5 @@
+using MilkVio.DPS.Reaper.ReaperData;
+
 namespace MilkVio.DPS.Reaper;
 
 // 只推演有限的GCD步数，不查询游戏，不修改实际量谱。
@@ -5,6 +7,22 @@ public static class ReaperResources
 {
     private const float WeaveTime = 0.65f;
     private const float DeathDesignSafety = 0.25f;
+
+    public static bool AllowsPerfectio(ReaperState s) => s.Alive && s.HasTarget && s.Perfectio > 0
+        && !s.Locked && s.Distance <= GameData.GetCurrentAttackRange(25)
+        && !s.ComboAtRisk(s.PerfectioGcd)
+        && (!s.FarPerfectioQt || s.IsDump || s.CircleLeft > 0 || !s.Melee
+            || s.Perfectio < ReaperSettings.Instance.远离完人极限释放阈值);
+
+    // 从下一格GCD算到团契后可续连击的位置；完人可以排在连击后面。
+    public static float EnshroudComboDelay(ReaperState s)
+    {
+        if (!s.HasTiming) return 0;
+        var enshroudAt = Math.Max(s.EnshroudCd, Math.Max(0, WeaveTime - s.GcdElapsed));
+        var missedSlot = Math.Max(0, enshroudAt + WeaveTime - s.GcdLeft);
+        var entryDelay = MathF.Ceiling(missedSlot / s.Gcd) * s.Gcd;
+        return entryDelay + (s.Level >= 90 ? 4 * s.ReapGcd + s.CommunioGcd : 5 * s.ReapGcd);
+    }
 
     public static float WindowCircleCoverage(ReaperState s)
     {
@@ -137,17 +155,21 @@ public static class ReaperResources
             charges = Math.Min(2, charges + (time - previousTime) / Math.Max(1, s.SliceRecast));
             previousTime = time;
             var gain = 0;
+            var usePerfectio = !perfectioUsed && s.Perfectio > time && AllowsPerfectio(s with
+            {
+                Perfectio = s.Perfectio - time, CircleLeft = Math.Max(0, s.CircleLeft - time),
+                ComboLeft = Math.Max(0, s.ComboLeft - time), GcdLeft = 0, Reavers = 0, Enshrouded = 0
+            });
             var weave = Math.Max(s.GluttonyCd, time + WeaveTime);
             if (weave > time + s.Gcd - WeaveTime)
                 weave = Math.Max(s.GluttonyCd, time + s.Gcd + WeaveTime);
             if (reavers > 0) reavers--;
-            else if (!perfectioUsed && s.Perfectio > time && s.CircleLeft > time
+            else if (usePerfectio && s.CircleLeft > time
                 && s.CircleLeft - time <= Math.Max(s.Gcd, 2)) perfectioUsed = true;
             else if (s.DotQt && (dot <= time + DeathDesignWindow(s, time)
                 || soul >= 50 && NeedsGluttonyPreparation(s, dot, time, weave)))
                 dot = Math.Min(time + 60, Math.Max(dot, time) + 30);
-            else if (!perfectioUsed && s.Perfectio > time
-                && (!s.FarPerfectioQt || s.CircleLeft > time || s.Perfectio - time <= 6)) perfectioUsed = true;
+            else if (usePerfectio) perfectioUsed = true;
             else if (!harvestUsed && s.SacrificeStacks > 0 && s.Bloodsown <= time && s.SacrificeLeft > time
                 && s.FreeEnshroud <= 0 && s.Perfectio <= 0
                 && (s.EnshroudQt || s.SacrificeLeft - time <= s.Gcd + 1)) harvestUsed = true;

@@ -129,7 +129,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
 
     private PAction? ResolveAlways()
     {
-        if (ReaperBattleData.Instance.DmuOpener.Active) return null;
+        if (ReaperBattleData.Instance.DmuOpener.Active || Planner.IsOpener) return null;
         foreach (var resolver in _alwaysResolvers)
         {
             var action = TryResolve(resolver, out _);
@@ -147,6 +147,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
         if (TryHarvestWait(out var harvest)) return harvest;
         var planned = TryPlannedAction(Planner.GcdAction, ActionType.Gcd);
         if (planned != null) return planned;
+        if (Planner.IsOpener) return null;
         if (DumpEnabled) return _skipPlannerOnce || Planner.RulesDisabled ? TryDumpFallback(ActionType.Gcd) : null;
         if (!Planner.RulesDisabled && Planner.DeferSliceQueue) return null;
         foreach (var resolver in _gcdResolvers)
@@ -170,9 +171,10 @@ public class ReaperRotation : IRotation, IRotationLifecycle
             // 只尝试已选中的大丰收；短暂不可用不取消爆发，也不落到123。
             var resolver = new 大丰收();
             var harvest = resolver.GetAction();
-            var check = resolver.Check();
+            var check = Planner.IsOpener ? new CheckResult(fresh.CanHarvest, "固定起手大丰收尚未解锁") : resolver.Check();
             uint? nativeStatus = null;
-            if (check.Success && ReaperHelper.QtAllows(harvest.ActionId) && ReaperHelper.当前可执行(harvest, out nativeStatus))
+            if (check.Success && (Planner.IsOpener || ReaperHelper.QtAllows(harvest.ActionId))
+                && ReaperHelper.当前可执行(harvest, out nativeStatus))
             { action = harvest; return true; }
             return Planner.HoldHarvest(Environment.TickCount64,
                 check.Success ? $"原生状态={nativeStatus?.ToString() ?? "未检查"}" : check.Message);
@@ -193,6 +195,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
         if (!Planner.RulesDisabled && !Planner.Current.HasTarget) return null;
         var planned = TryPlannedAction(Planner.OffGcdAction, ActionType.OffGcd);
         if (planned != null) return planned;
+        if (Planner.IsOpener) return null;
         if (DumpEnabled)
             return (_skipPlannerOnce || Planner.RulesDisabled ? TryDumpFallback(ActionType.OffGcd) : null)
                 ?? TryResolve(new 真北OffGcd(), out _);
@@ -216,6 +219,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
             var action = resolver.GetAction();
             if (action != null && (skipPlanner || Planner.Allows(action.ActionId)) && Planner.AllowsResource(action.ActionId, skipPlanner)
                 && ReaperHelper.QtAllows(action.ActionId)
+                && (action.ActionId != ReaperSkill.完人 || ReaperResources.AllowsPerfectio(ReadState()))
                 && ReaperHelper.当前可执行(action)
                 && (resolver is not 真北OffGcd || resolver.Check().Success)) return action;
             result = new CheckResult(false, "当前技能不可用 继续检查后续技能");
@@ -312,9 +316,19 @@ public class ReaperRotation : IRotation, IRotationLifecycle
             }
             var action = CreateAction(id, type);
             if (!Planner.AllowsDuringHarvestWait(action.ActionId, Environment.TickCount64)) return null;
-            if (ReaperHelper.QtAllows(action.ActionId) && ReaperHelper.当前可执行(action)) return action;
+            if (Planner.IsOpener)
+            {
+                if (ReaperHelper.当前可执行(action, out var nativeStatus)) return action;
+                Planner.NoteOpenerBlocked(action.ActionId, nativeStatus);
+                return null;
+            }
+            if (ReaperHelper.QtAllows(action.ActionId)
+                && (action.ActionId != ReaperSkill.完人 || ReaperResources.AllowsPerfectio(fresh))
+                && ReaperHelper.当前可执行(action)) return action;
         }
         catch (Exception) { }
+        // 同一个固定步骤等待真实可用；规划器的进度看门狗负责结束异常起手。
+        if (Planner.IsOpener) return null;
         _skipPlannerOnce = true;
         if (Planner.IsPlanned)
         {

@@ -21,7 +21,8 @@ public class 附体OffGcd : IDecisionResolver
 
         if (ReaperSkill.夜游魂衣.GetActionCooldown() != 0) return new CheckResult(false, "夜游魂衣未冷却");
         if (ReaperHelper.可用附体层数() < 1) return new CheckResult(false, "没有可用附体层数");
-        if (ReaperHelper.需要续连击(ReaperHelper.单附体占用时间()))
+        var state = ReaperState.Read();
+        if (state.ComboAtRisk(ReaperResources.EnshroudComboDelay(state)))
             return new CheckResult(false, "附体前先续连击");
 
         return new CheckResult(true, "附体层数>=1 直接附体");

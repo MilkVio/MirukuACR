@@ -19,6 +19,7 @@ public sealed class ReaperBurstPlanner
     private bool _qtKnown, _circleQt, _enshroudQt;
     private bool _firstDot, _skipFirstDot, _harvestUsed, _finishComboDone, _perfectioDone;
     private int _prepGcds, _openerStep, _executions;
+    private (int Step, uint Id, uint? Status)? _openerBlocked;
     private uint _lastRecordedGcd;
     private long _lastRecordedGcdAt;
     private ReaperState _previous;
@@ -28,8 +29,8 @@ public sealed class ReaperBurstPlanner
     private long _recoveryUntil;
     private readonly ReaperProjection _projection = new();
     private readonly ReaperDumpPlanner _dump = new();
-    public string ProjectionDebug => Current.IsDump ? _dump.Debug : _projection.Debug;
-    public string ModeName => Current.IsDump ? "倾泻" : IsSimple ? "兜底"
+    public string ProjectionDebug => IsOpener ? "固定起手" : Current.IsDump ? _dump.Debug : _projection.Debug;
+    public string ModeName => IsOpener ? "起手" : Current.IsDump ? "倾泻" : IsSimple ? "兜底"
         : !IsPlanned && Current.CircleLeft > 0 ? "非标准爆发" : Phase.ToString();
 
     internal ReaperBurstPlanner ForkForForecast() => new()
@@ -61,6 +62,7 @@ public sealed class ReaperBurstPlanner
     public float? BurstCommunioIn { get; private set; }
     public string FallbackReason { get; private set; } = "";
     public bool IsPlanned => Phase != ReaperBurstPhase.非爆发期;
+    public bool IsOpener => Phase == ReaperBurstPhase.起手;
     public bool IsCoordinating => _coordinateUntil > Current.Now;
     public bool IsSimple => Current.Now < _simpleUntil;
     public bool RulesDisabled { get; private set; }
@@ -86,6 +88,7 @@ public sealed class ReaperBurstPlanner
         _shroudSyncUntil = 0;
         _qtKnown = _firstDot = _skipFirstDot = _harvestUsed = _finishComboDone = _perfectioDone = false;
         _prepGcds = _openerStep = _executions = 0;
+        _openerBlocked = null;
         _lastRecordedGcd = 0; _lastRecordedGcdAt = 0;
         Phase = ReaperBurstPhase.非爆发期; Reason = reason;
         GcdAction = OffGcdAction = 0; ForecastGreen = -1;
@@ -170,15 +173,48 @@ public sealed class ReaperBurstPlanner
     public void BeginOpener(ReaperState s)
     {
         Current = s;
-        if (s.IsDump || !s.Alive || !s.HasTarget || s.Level < 100 || !s.HasTiming || !OpenerQts(s)
+        if (!s.Alive || !s.HasTarget || s.Level < 100 || !s.HasTiming
             || s.Locked || s.CircleCd > 0 || s.GluttonyCd > 0 || s.SliceCharges < 1) return;
+        _coordinateUntil = _coordinateCooldown = _simpleUntil = 0;
+        _projection.Clear(); _dump.Clear();
         _openerStep = _executions = 0;
+        _openerBlocked = null;
         _firstDot = _skipFirstDot = _harvestUsed = _perfectioDone = _finishComboDone = false;
         SetPhase(ReaperBurstPhase.起手);
         PromeSettings.Instance.OpenerHasBeenExecuted = true;
     }
 
-    private static bool OpenerQts(ReaperState s) => s.CircleQt && s.EnshroudQt && s.GluttonyQt && s.SliceQt && s.DotQt;
+    // 只用于固定步骤内部的可用性计算，不修改实况或真实QT。
+    private static ReaperState OpenerState(ReaperState s) => s with
+        { EnshroudQt = true, HarvestMoonQt = false, DumpQt = false, WindowActive = false };
+
+    internal void NoteOpenerBlocked(uint id, uint? nativeStatus)
+    {
+        var blocked = (_openerStep, id, nativeStatus);
+        if (!IsOpener || _openerBlocked == blocked) return;
+        _openerBlocked = blocked;
+        if (!_forecastOnly) ReaperBattleData.Instance.DebugLog.Note(Current.Now,
+            $"固定起手第{_openerStep + 1}步暂不可用：技能={id} 原生状态={nativeStatus?.ToString() ?? "冷却/目标/距离等条件未满足"}");
+    }
+
+    private bool UpdateOpener(ReaperState s)
+    {
+        if (!IsOpener) return false;
+        if (!ReaperSettings.Instance.启用起手 || PromeSettings.Instance.EnableAcr is AcrState.Off or AcrState.Hold
+            || !s.HasTarget || !s.HasTiming || _previous.PlayerId != 0 && s.PlayerId != _previous.PlayerId
+            || _previous.TargetId != 0 && s.TargetId != _previous.TargetId)
+        { Replan("起手条件失效，交回普通循环"); return false; }
+        Reconcile(s);
+        if (s.Now - _phaseAt > 40000 || s.Now - _progressAt > Math.Max(9000, 3 * s.Gcd * 1000 + 2000))
+        { Cancel("起手未推进，交回普通循环"); return false; }
+        Reason = $"固定起手第{_openerStep + 1}步";
+        BuildOpener(OpenerState(s));
+        if (!IsOpener) return false;
+        (BurstCommunioIn, BurstFinishIn) = EstimateBurstFinish(s);
+        UpdateHarvestQueue(s);
+        _previous = s;
+        return true;
+    }
 
     private void SetPhase(ReaperBurstPhase phase)
     {
@@ -226,6 +262,8 @@ public sealed class ReaperBurstPlanner
             && (s.LastGcd != ReaperSkill.团契 || s.Enshrouded <= 0)) ObserveAction(s.LastGcd);
         if (s.LastGcd == ReaperSkill.团契 && _previous.Enshrouded > 0 && s.Enshrouded <= 0)
             ObserveAction(s.LastGcd);
+        // 固定序列独占出招；QT、倾泻和窗口只保留最新实况，结束后再参与普通决策。
+        if (UpdateOpener(s)) return;
         if (s.IsDump != _previous.IsDump)
         {
             Replan("倾泻模式变化，按当前资源重算");
@@ -265,8 +303,7 @@ public sealed class ReaperBurstPlanner
             Replan("目标变化，按实况继续");
         if (IsPlanned && (!s.HasTiming || (!s.EnshroudQt && s.Enshrouded <= 0)
             || (!s.DotQt && Phase == ReaperBurstPhase.准备)
-            || (!s.CircleQt && s.CircleLeft <= 0 && s.CircleCd < 60)
-            || (Phase == ReaperBurstPhase.起手 && !OpenerQts(s))))
+            || (!s.CircleQt && s.CircleLeft <= 0 && s.CircleCd < 60)))
             Replan("时序或QT变化，按当前权限重算");
 
         Reconcile(s);
@@ -382,10 +419,10 @@ public sealed class ReaperBurstPlanner
         // 漏掉神秘环效果事件时，用实际冷却进入新一轮校正；不以Buff在0附近抖动重新发放额度。
         if (_previous.InCombat && _previous.CircleCd <= 1 && s.CircleCd > 60 && s.Bloodsown > 3)
         { StopHarvestWait("新一轮神秘环"); _harvestWaitUsed = false; }
-        if (s.TargetId != _previous.TargetId || s.EnshroudQt != _previous.EnshroudQt || s.CircleQt != _previous.CircleQt
+        if (s.TargetId != _previous.TargetId || !IsOpener && (s.EnshroudQt != _previous.EnshroudQt || s.CircleQt != _previous.CircleQt
             || s.DotQt != _previous.DotQt || s.GluttonyQt != _previous.GluttonyQt || s.BloodQt != _previous.BloodQt
             || s.SliceQt != _previous.SliceQt || s.HarvestMoonQt != _previous.HarvestMoonQt
-            || s.WindowVersion != _previous.WindowVersion || s.WindowActive != _previous.WindowActive)
+            || s.WindowVersion != _previous.WindowVersion || s.WindowActive != _previous.WindowActive))
             StopHarvestWait("目标/QT/窗口变化");
         if (!CanWaitForHarvest) StopHarvestWait("等待条件失效");
         else if (_harvestQueueUntil > 0 && s.Now >= _harvestQueueUntil) StopHarvestWait("等待超时，恢复普通求解");
@@ -400,9 +437,10 @@ public sealed class ReaperBurstPlanner
     }
 
     internal bool CanWaitForHarvest => !RulesDisabled && !IsCoordinating && GcdAction == ReaperSkill.大丰收
-        && Current.Alive && Current.InCombat && Current.HasTarget && ReaperBurstRecovery.HarvestNextGcd(Current)
-        && !(Current.DotQt && Current.Melee && Current.DeathDesign <= ReaperBurstRecovery.HarvestAt(Current) + 0.15f)
-        && (!Current.WindowActive || Current.WindowLeft > ReaperBurstRecovery.HarvestAt(Current) + 0.65f);
+        && Current.Alive && Current.InCombat && Current.HasTarget
+        && ReaperBurstRecovery.HarvestNextGcd(IsOpener ? OpenerState(Current) : Current)
+        && (IsOpener || !(Current.DotQt && Current.Melee && Current.DeathDesign <= ReaperBurstRecovery.HarvestAt(Current) + 0.15f)
+            && (!Current.WindowActive || Current.WindowLeft > ReaperBurstRecovery.HarvestAt(Current) + 0.65f));
 
     // 每次机会只启动一次。真实经过时间独立于快照/Buff计时，提交动作也不续期。
     internal bool HoldHarvest(long now, string unavailable = "")
@@ -637,14 +675,19 @@ public sealed class ReaperBurstPlanner
         if (Phase == ReaperBurstPhase.大丰收衔接)
         {
             if (s.CanHarvest || ReaperBurstRecovery.HarvestNextGcd(s)) GcdAction = ReaperSkill.大丰收;
-            else if (_harvestUsed && s.CanEnshroud) OffGcdAction = ReaperSkill.夜游魂衣;
+            else if (_harvestUsed && s.CanEnshroud)
+            {
+                if (s.ComboAtRisk(ReaperResources.EnshroudComboDelay(s))) GcdAction = s.ComboNext;
+                else OffGcdAction = ReaperSkill.夜游魂衣;
+            }
             else if (s.Bloodsown <= 0 && !_harvestUsed && s.SacrificeStacks == 0 && s.Now - _phaseAt > 1500)
                 Cancel("没有可用大丰收，转剩余团辅爆发");
             return;
         }
         if (Phase == ReaperBurstPhase.收尾)
         {
-            if (s.Perfectio > 0 && (!s.FarPerfectioQt || s.CircleLeft > 0 || !s.Melee || s.Perfectio < 6))
+            if (s.ComboAtRisk(s.Perfectio > 0 ? s.PerfectioGcd : s.Gcd)) GcdAction = s.ComboNext;
+            else if (ReaperResources.AllowsPerfectio(s))
                 GcdAction = ReaperSkill.完人;
             else if (!_perfectioDone && s.Perfectio <= 0 && s.Now - _phaseAt < 1000) return;
             else if (!_finishComboDone && s.ComboNext != 0 && s.Melee) GcdAction = s.ComboNext;
@@ -704,12 +747,13 @@ public sealed class ReaperBurstPlanner
         }
         if (s.Reavers > 0) GcdAction = s.Melee ? ReaperSkill.缢杀 : 0;
         else if (s.ComboAtRisk(s.HasTiming ? s.Gcd : 3)) GcdAction = s.ComboNext;
-        else if (s.Perfectio > 0 && inBuff && s.CircleLeft <= Math.Max(s.Gcd, 2)) GcdAction = ReaperSkill.完人;
+        else if (s.Perfectio > 0 && s.ComboAtRisk(s.PerfectioGcd)) GcdAction = s.ComboNext;
+        else if (inBuff && s.CircleLeft <= Math.Max(s.Gcd, 2) && ReaperResources.AllowsPerfectio(s)) GcdAction = ReaperSkill.完人;
         else if (ReaperResources.ShouldRefreshBeforeGluttony(s))
         { GcdAction = ReaperSkill.死亡之影; Reason = "暴食前补烙印，覆盖处刑后的续印"; }
         else if (ReaperResources.ShouldRefreshDeathDesign(s))
         { GcdAction = ReaperSkill.死亡之影; Reason = "提前续死亡烙印"; }
-        else if (s.Perfectio > 0 && (s.WindowActive || inBuff || !s.FarPerfectioQt || !s.Melee || s.Perfectio < 6)) GcdAction = ReaperSkill.完人;
+        else if (ReaperResources.AllowsPerfectio(s)) GcdAction = ReaperSkill.完人;
         else if ((s.CanHarvest || ReaperBurstRecovery.HarvestNextGcd(s))
             && (s.EnshroudQt || s.SacrificeLeft <= Math.Max(3, s.Gcd + 1)))
         {
@@ -719,6 +763,8 @@ public sealed class ReaperBurstPlanner
         else if (ReaperResources.IsWindowClosing(s) && s.WindowLeft <= Math.Max(2 * s.Gcd, 5)
             && ReaperResources.AllowsHarvestMoon(s))
             GcdAction = ReaperSkill.收获月;
+        if (GcdAction == 0 && s.Perfectio > 0 && s.FarPerfectioQt && s.Melee && !ReaperResources.AllowsPerfectio(s))
+            Reason = "近战保留完人，继续其他可用技能";
 
         if (s.CircleQt && s.CircleCd <= 0 && !IsCoordinating)
         {
@@ -729,13 +775,14 @@ public sealed class ReaperBurstPlanner
         if (GcdAction is ReaperSkill.大丰收 or ReaperSkill.完人 or ReaperSkill.死亡之影) return;
         if (harvestPriority && s.FreeEnshroud > 0 && s.Melee && !IsCoordinating)
         {
-            if (s.ComboAtRisk(s.SingleDuration)) GcdAction = s.ComboNext;
+            if (s.ComboAtRisk(ReaperResources.EnshroudComboDelay(s))) GcdAction = s.ComboNext;
             else if (s.DotQt && s.DeathDesign < s.GcdLeft + s.SingleDuration + 1)
                 GcdAction = ReaperSkill.死亡之影;
             else if (s.CanEnshroud)
             {
                 OffGcdAction = ReaperSkill.夜游魂衣;
-                Reason = "优先兑现大丰收的免费附体";
+                Reason = s.ComboNext == 0 ? "优先兑现大丰收的免费附体"
+                    : $"优先免费附体，预计{s.GcdLeft + ReaperResources.EnshroudComboDelay(s):F2}s后续连击";
             }
             return;
         }
@@ -755,7 +802,7 @@ public sealed class ReaperBurstPlanner
                 chooseEnshroud = false;
                 Reason = "先消费红，为即将满层的灵魂切割腾空间";
             }
-            if (chooseEnshroud && s.ComboAtRisk(s.SingleDuration)) { GcdAction = s.ComboNext; return; }
+            if (chooseEnshroud && s.ComboAtRisk(ReaperResources.EnshroudComboDelay(s))) { GcdAction = s.ComboNext; return; }
             if (chooseEnshroud && s.DotQt && s.HasTiming && s.DeathDesign < s.GcdLeft + s.SingleDuration + 1)
             {
                 GcdAction = ReaperSkill.死亡之影;
@@ -800,6 +847,7 @@ public sealed class ReaperBurstPlanner
 
     public bool Allows(uint id)
     {
+        if (IsOpener) return id == GcdAction || id == OffGcdAction;
         if (!AllowsResource(id)) return false;
         if (RulesDisabled) return true;
         var s = Current;
@@ -816,6 +864,7 @@ public sealed class ReaperBurstPlanner
 
     public bool AllowsResource(uint id, bool fallback = false)
     {
+        if (IsOpener) return id == GcdAction || id == OffGcdAction;
         if (!AllowsDuringHarvestWait(id, _forecastOnly ? Current.Now : Environment.TickCount64)) return false;
         var s = Current;
         if (!s.WindowActive) return true;

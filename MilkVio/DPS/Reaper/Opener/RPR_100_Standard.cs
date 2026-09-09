@@ -25,7 +25,7 @@ public class RPR_100_Standard : IOpener
         var harpeAt = (int)MathF.Round(ReaperSettings.Instance.勾刃倒数预读时间 * 1000);
         countdownHandler.AddAction(harpeAt, () =>
         {
-            if (!ReaperSettings.Instance.启用起手 || !PromeSettings.Instance.GetQt(ReaperQt.勾刃)) return null!;
+            if (!ReaperSettings.Instance.启用起手 || PromeSettings.Instance.EnableAcr is AcrState.Off or AcrState.Hold) return null!;
             var action = new PAction(ReaperSkill.勾刃, ActionType.Gcd, ActionTargetType.Target);
             return ReaperHelper.当前可执行(action) ? action : null!;
         });

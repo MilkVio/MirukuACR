@@ -11,13 +11,17 @@ namespace MilkVio.DPS.Reaper;
 
 internal sealed class ReaperDmuOpener
 {
-    private static readonly uint[] Skills = { ReaperSkill.勾刃, ReaperSkill.神秘环, ReaperSkill.地狱入境,
-        ReaperSkill.死亡之影, ReaperSkill.灵魂切割, ReaperSkill.暴食 };
+    // 仅重试从未开始的预读；限频且最多三次，不重试位移或被打断的咏唱。
+    private const int HarpeRetryIntervalMs = 300;
+    private const int HarpeMaxAttempts = 3;
+    private const int CombatVerificationRetries = 5;
+    private static readonly uint[] Skills = { ReaperSkill.勾刃, ReaperSkill.神秘环, ReaperSkill.地狱入境 };
     private readonly ConcurrentQueue<(uint Id, long At)> _effects = new();
     private int _step;
+    private int _harpeAttempts;
     private ulong _playerId, _targetId;
     private long _armedAt, _pullAt, _startedAt, _stepAt, _submittedAt, _castFinishAt;
-    private bool _countdown, _sawCast, _instantHarpe, _ownsHeading;
+    private bool _countdown, _sawCast, _instantHarpe, _ownsHeading, _combatQueued;
     private float _harpeAt;
     public bool Active { get; private set; }
     public string Status { get; private set; } = "";
@@ -51,7 +55,7 @@ internal sealed class ReaperDmuOpener
 
     public void EnqueueAction(ulong source, uint id, long at)
     {
-        if (Active && source == _playerId && _effects.Count < 24 && Skills.Contains(id))
+        if (Active && !_combatQueued && source == _playerId && _effects.Count < 24 && Skills.Contains(id))
             _effects.Enqueue((id, at));
     }
 
@@ -61,13 +65,17 @@ internal sealed class ReaperDmuOpener
         Active = false;
         ReleaseHeading();
         _effects.Clear();
-        _step = 0; _playerId = _targetId = 0;
+        _step = _harpeAttempts = 0; _playerId = _targetId = 0;
         _armedAt = _pullAt = _startedAt = _stepAt = _submittedAt = _castFinishAt = 0;
-        _countdown = _sawCast = _instantHarpe = false;
+        _countdown = _sawCast = _instantHarpe = _combatQueued = false;
         _harpeAt = 0;
         Status = reason;
-        if (wasActive) ReaperBattleData.Instance.DebugLog.Note(Environment.TickCount64, reason);
         if (wasActive && !GameData.IsInCombat()) ReaperBattleData.Instance.DebugLog.CancelCountdown();
+        if (wasActive && reason.Length > 0)
+        {
+            PromeSettings.Instance.OpenerHasBeenExecuted = true;
+            ReaperBattleData.Instance.DebugLog.Note(Environment.TickCount64, reason);
+        }
         if (wasActive) ReaperBattleData.Instance.Planner.Replan(reason);
     }
 
@@ -87,8 +95,16 @@ internal sealed class ReaperDmuOpener
     private void Update(long now)
     {
         var me = Core.Me;
-        if (me == null || me.IsDead || me.GameObjectId != _playerId || me.ClassJob.RowId != 39
-            || !Permissions() || PromeSettings.Instance.EnableAcr is AcrState.Off or AcrState.Hold)
+        if (me == null || me.IsDead || me.GameObjectId != _playerId || me.ClassJob.RowId != 39)
+        { Reset("妖星起手已取消"); return; }
+
+        // 后三招交给宿主推进；Hold也由宿主暂停/恢复，不重排已提交的技能组。
+        if (_combatQueued)
+        {
+            if (!QueueBusy()) Reset("妖星起手技能组结束，交回ACR求解");
+            return;
+        }
+        if (!Permissions() || PromeSettings.Instance.EnableAcr is AcrState.Off or AcrState.Hold)
         { Reset("妖星起手已取消"); return; }
 
         var engaged = GameData.IsInCombat() || Core.Target is { } target && target.StatusFlags.HasFlag(StatusFlags.InCombat);
@@ -103,10 +119,13 @@ internal sealed class ReaperDmuOpener
 
         while (_effects.TryDequeue(out var effect))
         {
+            if (effect.At >= _armedAt && effect.Id == ReaperSkill.地狱入境
+                && (_step < 2 || _step == 2 && _submittedAt == 0))
+            { Reset("已手动地狱入境，结束妖星起手，避免重复位移"); return; }
             if (_submittedAt > 0 && effect.At >= _submittedAt && effect.At >= _armedAt && effect.Id == Skills[_step])
             {
                 Advance(now);
-                if (!Active) return;
+                if (_combatQueued) return;
             }
         }
 
@@ -132,11 +151,17 @@ internal sealed class ReaperDmuOpener
                 Advance(now);
             else
             {
-                if (now - _submittedAt > (id == ReaperSkill.地狱入境 ? 1200 : 2500))
-                    Reset("技能未确认，结束妖星起手");
-                return;
+                if (id == ReaperSkill.勾刃 && !_sawCast && !me.IsCasting && ActionHelper.GetGcdRemain() <= 0
+                    && _harpeAttempts < HarpeMaxAttempts && now - _submittedAt >= HarpeRetryIntervalMs)
+                    _submittedAt = 0;
+                else
+                {
+                    if (now - _submittedAt > (id == ReaperSkill.地狱入境 ? 1200 : 2500))
+                        Reset("技能未确认，结束妖星起手");
+                    return;
+                }
             }
-            if (!Active) return;
+            if (!Active || _combatQueued) return;
             id = Skills[_step];
         }
 
@@ -147,7 +172,6 @@ internal sealed class ReaperDmuOpener
         var off = IsOffGcd(id);
         // 即时执行入口不负责宿主的提前预排，GCD真正转好后才提交。
         if (!off && ActionHelper.GetGcdRemain() > 0) return;
-        if (id == ReaperSkill.暴食 && (JobGaugeHelper.RPR.灵魂值 < 50 || ReaperHelper.IsIn附体() || ReaperHelper.IsIn妖异之镰())) return;
         var action = new PAction(id, off ? ActionType.OffGcd : ActionType.Gcd,
             id is ReaperSkill.神秘环 or ReaperSkill.地狱入境 ? ActionTargetType.Self : ActionTargetType.Target);
         if (!ReaperHelper.当前可执行(action)) return;
@@ -161,6 +185,7 @@ internal sealed class ReaperDmuOpener
         _submittedAt = now;
         if (id == ReaperSkill.勾刃)
         {
+            _harpeAttempts++;
             _instantHarpe = me.HasStatus(ReaperBuff.勾刃效果提高Buff);
             // 预读即使被取消，也不能在随后伤害引战时重新开始同一套位移起手。
             PromeSettings.Instance.OpenerHasBeenExecuted = true;
@@ -179,8 +204,25 @@ internal sealed class ReaperDmuOpener
         _submittedAt = 0; _stepAt = now;
         if (_step >= Skills.Length)
         {
-            Reset("妖星起手完成，交回ACR求解");
-            ReaperBattleData.Instance.Planner.Replan(Status);
+            var sequence = new List<PAction>
+            {
+                new(ReaperSkill.死亡之影, ActionType.Gcd, ActionTargetType.Target)
+                { RequiresVerification = true },
+                new(ReaperSkill.灵魂切割, ActionType.Gcd, ActionTargetType.Target)
+                { RequiresVerification = true },
+                new(ReaperSkill.暴食, ActionType.OffGcd, ActionTargetType.Target)
+                { RequiresVerification = true }
+            };
+            // 当前SDK尚未导出这个属性，宿主1.5.9.8已支持；只在入队时设置。
+            var retries = typeof(PAction).GetProperty("MaxVerificationRetries");
+            foreach (var action in sequence) retries?.SetValue(action, CombatVerificationRetries);
+            ActionQueueManager.Enqueue(sequence);
+            _combatQueued = true;
+            _effects.Clear();
+            Status = "妖星起手：宿主技能组（死亡之影→灵魂切割→暴食）";
+            ReaperBattleData.Instance.DebugLog.Note(now, retries == null
+                ? $"{Status}，当前宿主使用默认重试次数"
+                : $"{Status}，每招最多重试{CombatVerificationRetries}次");
         }
         else Status = $"妖星起手：{Name(Skills[_step])}";
     }
@@ -193,20 +235,15 @@ internal sealed class ReaperDmuOpener
         catch (Exception) { } // 宿主1500ms期限仍可解除面向。
     }
 
-    private static bool Permissions() => ReaperSettings.Instance.启用起手
-        && (!PromeSettings.Instance.GetQt(ReaperQt.倾泻资源) || ReaperBattleData.Instance.Window.Active)
-        && PromeSettings.Instance.GetQt(ReaperQt.勾刃) && PromeSettings.Instance.GetQt(ReaperQt.神秘环)
-        && PromeSettings.Instance.GetQt(ReaperQt.Dot) && PromeSettings.Instance.GetQt(ReaperQt.灵魂割)
-        && PromeSettings.Instance.GetQt(ReaperQt.暴食);
+    private static bool Permissions() => ReaperSettings.Instance.启用起手;
 
     private static bool QueueBusy() => ActionQueueManager.HasActionsInGcdQueue() || ActionQueueManager.HasActionsInOffGcdQueue()
         || ActionQueueManager.HasActionsInAlwaysQueue() || ActionQueueManager.HasHighPriorityAction()
         || ActionUpdater.HasActiveCommand() || ActionUpdater.HasLockedGcdAction();
 
-    private static bool IsOffGcd(uint id) => id is ReaperSkill.神秘环 or ReaperSkill.地狱入境 or ReaperSkill.暴食;
+    private static bool IsOffGcd(uint id) => id is ReaperSkill.神秘环 or ReaperSkill.地狱入境;
     private static string Name(uint id) => id switch
     {
-        ReaperSkill.勾刃 => "勾刃", ReaperSkill.神秘环 => "神秘环", ReaperSkill.地狱入境 => "地狱入境",
-        ReaperSkill.死亡之影 => "死亡之影", ReaperSkill.灵魂切割 => "灵魂切割", _ => "暴食"
+        ReaperSkill.勾刃 => "勾刃", ReaperSkill.神秘环 => "神秘环", ReaperSkill.地狱入境 => "地狱入境", _ => id.ToString()
     };
 }
