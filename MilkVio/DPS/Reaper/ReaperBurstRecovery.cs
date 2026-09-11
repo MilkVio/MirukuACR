@@ -13,7 +13,7 @@ internal static class ReaperBurstRecovery
     internal static bool IsActive(ReaperState s) => !s.IsDump && s.HasTiming && s.Level >= 100
         && (s.CircleLeft > 0 || s.CircleQt && s.CircleCd <= s.PreparationLead);
 
-    internal static bool PendingHarvest(ReaperState s) => s.EnshroudQt && s.SacrificeStacks > 0
+    internal static bool PendingHarvest(ReaperState s) => s.CircleQt && s.SacrificeStacks > 0
         && s.SacrificeLeft > s.Bloodsown + 0.15f && s.FreeEnshroud <= 0 && s.Perfectio <= 0 && s.Occulta <= 0;
 
     internal static float HarvestAt(ReaperState s) => s.Bloodsown <= s.GcdLeft + HarvestMaxExtraWaitSeconds
@@ -26,16 +26,17 @@ internal static class ReaperBurstRecovery
         && float.IsFinite(s.Bloodsown) && s.Bloodsown >= 0 && s.Bloodsown <= s.GcdLeft + HarvestMaxExtraWaitSeconds
         && !s.ComboAtRisk(s.Gcd + Math.Max(0, s.Bloodsown - s.GcdLeft))
         && s.SacrificeLeft > Math.Max(s.GcdLeft, s.Bloodsown) + 0.15f
-        && (s.IsDump || s.EnshroudQt || s.SacrificeLeft <= Math.Max(3, s.Gcd + 1))
         && (s with { Bloodsown = 0 }).CanHarvest;
 
     internal static bool PrioritizeHarvestReward(ReaperState s)
     {
-        if (s.IsDump || !s.Alive || !s.HasTarget || !s.HasTiming || s.Level < 100 || !s.EnshroudQt || s.Locked)
+        if (s.IsDump || !s.Alive || !s.HasTarget || !s.HasTiming || s.Level < 100 || s.Locked)
             return false;
-        var free = s.FreeEnshroud > 0 && s.Perfectio <= 0;
+        var free = s.EnshroudQt && s.FreeEnshroud > 0 && s.Perfectio <= 0;
         if (!free && !HarvestNextGcd(s)) return false;
         if (!s.WindowActive) return true;
+        // 附体关闭时只兑现大丰收本身，不预支后续附体的收益或占用时间。
+        if (!s.EnshroudQt) return HarvestAt(s) + 0.65f < s.WindowLeft;
         // 自己的神秘环结束不是输出截止；只有真实窗口不足时才比较眼前几招。
         var firstReap = free ? s.GcdLeft + (s.GcdLeft > 0.65f ? 0 : s.Gcd) : HarvestAt(s) + s.Gcd;
         var enshroudAt = Math.Max(s.EnshroudCd, Math.Max(0, 0.65f - s.GcdElapsed));

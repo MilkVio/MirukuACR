@@ -60,6 +60,7 @@ public class PaladinRotation : IRotation
         {"骑士绝亚DollSkip起手", typeof(PLD_80_TEADS_ST)},
         {"骑士绝欧ST起手", typeof(PLD_90_TOP_ST)},
         {"骑士绝伊甸ST起手2", typeof(PLD_100_FRU_ST_FA)},
+        {"骑士ST突进起手", typeof(PLD_ONLYJUMP)},
     };
     
     public PaladinRotation()

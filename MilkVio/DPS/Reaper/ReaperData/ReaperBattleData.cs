@@ -4,6 +4,9 @@ public class ReaperBattleData
 {
     public static ReaperBattleData Instance { get; set; } = new();
     public ReaperBurstPlanner Planner { get; } = new();
+    internal ReaperLevel90Planner Planner90 { get; } = new();
+    internal IReaperPlanner ActivePlanner => ReaperLevelRules.UsesLevel90(Core.Me?.Level ?? 0) ? Planner90 : Planner;
+    private int _level;
     public ReaperOutputWindow Window { get; } = new();
     internal ReaperDmuOpener DmuOpener { get; } = new();
     internal ReaperAutoSoulsow AutoSoulsow { get; } = new();
@@ -37,7 +40,22 @@ public class ReaperBattleData
         SetFastCircle(false);
         AutoSoulsow.Cancel();
         Planner.Reset(reason);
+        Planner90.Reset(reason);
         Window.Reset(reason);
         DmuOpener.Reset(reason);
+    }
+
+    internal void SynchronizeLevel()
+    {
+        var level = Core.Me?.Level ?? 0;
+        if (level <= 0) return;
+        if (_level > 0 && _level != level) Reset($"等级同步：{_level}→{level}");
+        _level = level;
+    }
+
+    internal void ResetPlanners(string reason)
+    {
+        Planner.Reset(reason);
+        Planner90.Reset(reason);
     }
 }

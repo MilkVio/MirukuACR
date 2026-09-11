@@ -6,7 +6,7 @@ namespace MilkVio.DPS.Reaper;
 
 public enum ReaperBurstPhase { 非爆发期, 准备, 第一附体, 大丰收衔接, 第二附体, 收尾, 起手 }
 
-public sealed class ReaperBurstPlanner
+public sealed partial class ReaperBurstPlanner
 {
     private readonly ConcurrentQueue<(ulong Source, uint Id, uint Sequence, long At)> _events = new();
     private readonly Queue<(uint Sequence, uint Id)> _seen = new();
@@ -186,7 +186,7 @@ public sealed class ReaperBurstPlanner
 
     // 只用于固定步骤内部的可用性计算，不修改实况或真实QT。
     private static ReaperState OpenerState(ReaperState s) => s with
-        { EnshroudQt = true, HarvestMoonQt = false, DumpQt = false, WindowActive = false };
+        { CircleQt = true, EnshroudQt = true, HarvestMoonQt = false, DumpQt = false, WindowActive = false };
 
     internal void NoteOpenerBlocked(uint id, uint? nativeStatus)
     {
@@ -307,6 +307,8 @@ public sealed class ReaperBurstPlanner
             Replan("时序或QT变化，按当前权限重算");
 
         Reconcile(s);
+        if (Phase == ReaperBurstPhase.大丰收衔接 && !s.CircleQt && !_harvestUsed)
+            Replan("120关闭，跳过大丰收衔接");
         if (IsPlanned && _previous.CircleLeft > 0 && s.CircleLeft <= 0
             && Phase != ReaperBurstPhase.收尾 && !(Phase == ReaperBurstPhase.起手 && _openerStep >= 8))
             Cancel("神秘环已结束，按当前资源收尾");
@@ -754,11 +756,10 @@ public sealed class ReaperBurstPlanner
         else if (ReaperResources.ShouldRefreshDeathDesign(s))
         { GcdAction = ReaperSkill.死亡之影; Reason = "提前续死亡烙印"; }
         else if (ReaperResources.AllowsPerfectio(s)) GcdAction = ReaperSkill.完人;
-        else if ((s.CanHarvest || ReaperBurstRecovery.HarvestNextGcd(s))
-            && (s.EnshroudQt || s.SacrificeLeft <= Math.Max(3, s.Gcd + 1)))
+        else if (s.CanHarvest || ReaperBurstRecovery.HarvestNextGcd(s))
         {
             GcdAction = ReaperSkill.大丰收;
-            if (harvestPriority) Reason = "优先大丰收，衔接免费附体";
+            if (harvestPriority) Reason = s.EnshroudQt ? "优先大丰收，衔接免费附体" : "使用大丰收，附体QT关闭";
         }
         else if (ReaperResources.IsWindowClosing(s) && s.WindowLeft <= Math.Max(2 * s.Gcd, 5)
             && ReaperResources.AllowsHarvestMoon(s))
@@ -855,8 +856,7 @@ public sealed class ReaperBurstPlanner
         if (id == ReaperSkill.夜游魂衣) return !IsCoordinating && OffGcdAction == id;
         if (id == ReaperSkill.暴食) return OffGcdAction == id;
         if (id is ReaperSkill.隐匿挥割 or ReaperSkill.绞决爪 or ReaperSkill.缢杀爪) return OffGcdAction == ReaperSkill.隐匿挥割;
-        if (id == ReaperSkill.大丰收) return (!IsPlanned || GcdAction == id) && s.CanHarvest
-            && (s.IsDump || s.EnshroudQt || s.SacrificeLeft <= Math.Max(3, s.Gcd + 1));
+        if (id == ReaperSkill.大丰收) return (!IsPlanned || GcdAction == id) && s.CanHarvest;
         if (id == ReaperSkill.祭性 && Phase == ReaperBurstPhase.第一附体
             && (s.CircleLeft <= 0 || s.Lemure > 2) && s.Lemure > 1) return false;
         return true;

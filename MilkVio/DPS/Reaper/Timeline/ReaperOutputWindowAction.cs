@@ -59,7 +59,7 @@ public sealed class ReaperOutputWindowAction : IAction, ISerializableAction, IJo
         if (runtime == null) throw new InvalidOperationException("缺少当前时间轴运行上下文");
         if (!ReaperBattleData.Instance.Window.Set(_settings, runtime.Blackboard, Environment.TickCount64, out var error))
             throw new InvalidOperationException(error);
-        ReaperBattleData.Instance.Planner.WindowChanged("时间轴更新输出窗口");
+        ReaperBattleData.Instance.ActivePlanner.WindowChanged("时间轴更新输出窗口");
     }
 
     public bool DrawJobNodeEditor()
@@ -126,7 +126,7 @@ public sealed class ReaperClearWindowAction : IAction, ISerializableAction, IJob
     public void Execute()
     {
         ReaperBattleData.Instance.Window.Clear();
-        ReaperBattleData.Instance.Planner.WindowChanged("时间轴清除输出窗口");
+        ReaperBattleData.Instance.ActivePlanner.WindowChanged("时间轴清除输出窗口");
     }
     public ActionDto ToDto() => new() { Type = TypeKey };
     public static void Register(RotationNodeContext context) => ActionFactory.Register(context, TypeKey, _ => new ReaperClearWindowAction());

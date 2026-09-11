@@ -74,6 +74,7 @@ public class DrakKnightRotation : IRotation, IRotationMeta
         { "暗黑骑士 绝伊甸MT专用起手2", typeof(DRK_100_FRU_MT_FA) },
         { "暗黑骑士 绝欧米茄MT起手", typeof(DRK_90_TOP_MT) },
         { "暗黑骑士 绝欧米茄ST起手", typeof(DRK_90_TOP_ST) },
+        { "暗黑骑士MT单突进起手", typeof(DRK_ONLY_JUMP) },
     };
     
     public DrakKnightRotation()

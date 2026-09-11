@@ -32,6 +32,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
     private readonly OpenerSelector _openerSelector = new();
+    private readonly OpenerSelector _level90OpenerSelector = new();
     private long _lastResolverErrorAt;
     private readonly List<IDisposable> _subscriptions = new();
     private string _copyResult = "";
@@ -42,7 +43,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
     private int _simulationSoul = 50, _simulationShroud = 50;
     private int _simulationWindowVersion = -1;
     private string _simulationError = "";
-    private static ReaperBurstPlanner Planner => ReaperBattleData.Instance.Planner;
+    private static IReaperPlanner Planner => ReaperBattleData.Instance.ActivePlanner;
     public static IJobNodeProvider NodeProvider { get; } = new ReaperJobNodeProvider();
 
     public static IReadOnlyDictionary<string, bool> QtList { get; } = new Dictionary<string, bool>
@@ -63,11 +64,18 @@ public class ReaperRotation : IRotation, IRotationLifecycle
         {ReaperQt.勾刃, true},
         {ReaperQt.真北, true},
     };
-    public static IReadOnlyDictionary<string, Type> Openers { get; } = new Dictionary<string, Type>
+    private static readonly IReadOnlyDictionary<string, Type> Level100Openers = new Dictionary<string, Type>
     {
         { "镰刀100级标准起手", typeof(RPR_100_Standard) },
         { "镰刀100级妖星起手", typeof(RPR_100_DMU) }
     };
+    private static readonly IReadOnlyDictionary<string, Type> Level90Openers = new Dictionary<string, Type>
+    {
+        { "镰刀90级标准起手", typeof(RPR_90_Standard) }
+    };
+    // 宿主时间轴读取完整列表；设置页按等级分别保留选择。
+    public static IReadOnlyDictionary<string, Type> Openers { get; } =
+        Level100Openers.Concat(Level90Openers).ToDictionary(pair => pair.Key, pair => pair.Value);
 
     public ReaperRotation()
     {
@@ -100,10 +108,13 @@ public class ReaperRotation : IRotation, IRotationLifecycle
 
     public IOpener? GetOpener()
     {
-        if (!ReaperSettings.Instance.启用起手 || Core.Me == null || Core.Me.Level < 100)
+        ReaperBattleData.Instance.SynchronizeLevel();
+        if (!ReaperSettings.Instance.启用起手 || Core.Me == null || Core.Me.Level < 90)
             return null;
 
-        var opener = _openerSelector.Resolve(Openers);
+        var opener = ReaperLevelRules.UsesLevel90(Core.Me.Level)
+            ? _level90OpenerSelector.Resolve(Level90Openers)
+            : _openerSelector.Resolve(Level100Openers);
         ReaperBattleData.Instance.OpenerName = opener?.GetType().Name ?? "无起手";
         if (opener is not RPR_100_DMU) ReaperBattleData.Instance.DmuOpener.Reset();
         return opener;
@@ -129,6 +140,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
 
     private PAction? ResolveAlways()
     {
+        ReaperBattleData.Instance.SynchronizeLevel();
         if (ReaperBattleData.Instance.DmuOpener.Active || Planner.IsOpener) return null;
         foreach (var resolver in _alwaysResolvers)
         {
@@ -140,6 +152,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
 
     private PAction? ResolveGcd()
     {
+        ReaperBattleData.Instance.SynchronizeLevel();
         if (ReaperBattleData.Instance.DmuOpener.Active) return null;
         UpdatePlanner(true);
         _skipPlannerOnce = false;
@@ -171,7 +184,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
             // 只尝试已选中的大丰收；短暂不可用不取消爆发，也不落到123。
             var resolver = new 大丰收();
             var harvest = resolver.GetAction();
-            var check = Planner.IsOpener ? new CheckResult(fresh.CanHarvest, "固定起手大丰收尚未解锁") : resolver.Check();
+            var check = Planner.IsOpener ? new CheckResult((fresh with { CircleQt = true }).CanHarvest, "固定起手大丰收尚未解锁") : resolver.Check();
             uint? nativeStatus = null;
             if (check.Success && (Planner.IsOpener || ReaperHelper.QtAllows(harvest.ActionId))
                 && ReaperHelper.当前可执行(harvest, out nativeStatus))
@@ -189,6 +202,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
 
     private PAction? ResolveOffGcd()
     {
+        ReaperBattleData.Instance.SynchronizeLevel();
         if (ReaperBattleData.Instance.DmuOpener.Active) return null;
         UpdatePlanner(true);
         _skipPlannerOnce = false;
@@ -239,6 +253,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
 
     public static void UpdatePlanner(bool evaluateResources = false)
     {
+        ReaperBattleData.Instance.SynchronizeLevel();
         try { Planner.Update(ReadState(), evaluateResources); }
         catch (Exception) { Planner.DisableRules(); }
     }
@@ -264,9 +279,9 @@ public class ReaperRotation : IRotation, IRotationLifecycle
         {
             var state = ReadState();
             if (!state.IsDump || !state.Alive || !state.HasTarget) return null;
-            foreach (var id in ReaperDumpPlanner.Candidates(state, type == ActionType.OffGcd).Distinct())
+            foreach (var id in Planner.DumpCandidates(state, type == ActionType.OffGcd).Distinct())
             {
-                if (id == 0 || !ReaperDumpPlanner.CanUse(state, id, type == ActionType.OffGcd)) continue;
+                if (id == 0 || !Planner.CanDump(state, id, type == ActionType.OffGcd)) continue;
                 var action = CreateAction(id, type);
                 if (Planner.AllowsDuringHarvestWait(action.ActionId, Environment.TickCount64)
                     && ReaperHelper.QtAllows(action.ActionId) && ReaperHelper.当前可执行(action))
@@ -299,7 +314,17 @@ public class ReaperRotation : IRotation, IRotationLifecycle
             try { if (detection.Enemies && state.Alive && state.PlayerId != 0) noEnemies = TargetHelper.IsAllBossUntargetable(); } catch (Exception) { }
             try { if (detection.Weather) weather = GameData.Weather; } catch (Exception) { }
         }
-        return ReaperBattleData.Instance.Window.Update(state, noEnemies, weather);
+        state = ReaperBattleData.Instance.Window.Update(state, noEnemies, weather);
+        if (ReaperLevelRules.UsesLevel90(state.Level))
+        {
+            state = ReaperLevelRules.Normalize(state);
+            if (Core.Me is { } me) state = state with
+            {
+                PositionalBuff = Math.Max(me.GetStatusLeftTime(ReaperBuff.绞决效果提高Buff), me.GetStatusLeftTime(ReaperBuff.缢杀效果提高Buff)),
+                ReapingBuff = Math.Max(me.GetStatusLeftTime(ReaperBuff.虚无收割效果提高Buff), me.GetStatusLeftTime(ReaperBuff.交错收割效果提高Buff))
+            };
+        }
+        return state;
     }
 
     private PAction? TryPlannedAction(uint id, ActionType type)
@@ -358,11 +383,11 @@ public class ReaperRotation : IRotation, IRotationLifecycle
         }));
         _subscriptions.Add(PromeEventBus.OnPlayerDied(this, () =>
         {
-            Planner.Reset("死亡，清除旧计划");
+            ReaperBattleData.Instance.ResetPlanners("死亡，清除旧计划");
             ReaperBattleData.Instance.AutoSoulsow.Cancel();
             ReaperBattleData.Instance.DmuOpener.Reset("死亡，结束妖星起手");
         }));
-        _subscriptions.Add(PromeEventBus.OnPlayerRevived(this, () => Planner.Reset("复活，按当前红绿重建")));
+        _subscriptions.Add(PromeEventBus.OnPlayerRevived(this, () => ReaperBattleData.Instance.ResetPlanners("复活，按当前红绿重建")));
     }
 
     public void OnExitAcr()
@@ -441,7 +466,8 @@ public class ReaperRotation : IRotation, IRotationLifecycle
 
     private void DrawGeneral()
     {
-        _openerSelector.DrawCombo("起手选择", Openers);
+        _openerSelector.DrawCombo("100级起手选择", Level100Openers);
+        _level90OpenerSelector.DrawCombo("90级起手选择", Level90Openers);
         ImGui.Checkbox(ReaperQt.启用起手, ref ReaperSettings.Instance.启用起手);
         var harpeAt = ReaperSettings.Instance.勾刃倒数预读时间;
         if (ImGui.InputFloat("勾刃倒数预读（秒，下次倒数生效）", ref harpeAt))

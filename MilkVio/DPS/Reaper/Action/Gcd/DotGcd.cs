@@ -22,7 +22,7 @@ public class DotGcd : IDecisionResolver
 
         if (Core.Me.DistanceToMe() > currentMeleeRange) return new CheckResult(false, $"当前目标过远（>{currentMeleeRange}m）");
 
-        var planner = ReaperBattleData.Instance.Planner;
+        var planner = ReaperBattleData.Instance.ActivePlanner;
         if (planner.Current.Enshrouded > 0 && !planner.Current.IsDump)
             return new CheckResult(ReaperResources.NeedsDesignInShroud(planner.Current), "附体必要续印");
         if (planner.Current.IsDump ? planner.GcdAction == ReaperSkill.死亡之影

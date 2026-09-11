@@ -12,6 +12,7 @@ public class 大丰收 : IDecisionResolver
     // 大丰收 消耗死亡祭品层数的射线AOE 与死亡祭祀Buff互锁（存在时无法发动）
     public CheckResult Check()
     {
+        if (!ReaperHelper.QtAllows(ReaperSkill.大丰收)) return new CheckResult(false, "120 QT关闭");
         if (ReaperHelper.IsIn附体() || ReaperHelper.IsIn妖异之镰()) return new CheckResult(false, "当前在附体/妖异之镰");
 
         var me = Core.Me;

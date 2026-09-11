@@ -25,7 +25,7 @@ public class 真北OffGcd : IDecisionResolver
         if (me.HasStatus(1250) || ReaperHelper.IsIn附体() || !ReaperHelper.IsIn妖异之镰())
             return new(false, "当前不需要真北");
         if (!TargetHelper.HasPositionalRequirement(target)) return new(false, "目标无身位要求");
-        var next = ReaperBattleData.Instance.Planner.GcdAction;
+        var next = ReaperBattleData.Instance.ActivePlanner.GcdAction;
         if (next != 0 && next != ReaperSkill.缢杀) return new(false, "下一招不是身位技");
         if (ReaperHelper.选择身位技能().Position == TargetHelper.GetTargetPositional()) return new(false, "身位匹配");
 

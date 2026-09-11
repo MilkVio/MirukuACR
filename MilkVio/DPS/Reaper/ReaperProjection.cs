@@ -256,7 +256,7 @@ public sealed class ReaperProjection
         ReaperSkill.夜游魂切割 => s.Enshrouded > 0 && s.Void >= 2 && s.Melee,
         ReaperSkill.灵魂切割 => s.SliceQt && !s.Locked && s.Melee && s.SliceCharges >= 0.999f,
         ReaperSkill.死亡之影 => s.DotQt && s.Reavers == 0 && s.Melee,
-        ReaperSkill.大丰收 => s.CanHarvest && (s.IsDump || s.EnshroudQt || s.SacrificeLeft <= Math.Max(3, s.Gcd + 1)),
+        ReaperSkill.大丰收 => s.CanHarvest,
         ReaperSkill.完人 => ReaperResources.AllowsPerfectio(s),
         ReaperSkill.收获月 => ReaperResources.AllowsHarvestMoon(s),
         ReaperSkill.缢杀 => s.Reavers > 0 && s.Melee,

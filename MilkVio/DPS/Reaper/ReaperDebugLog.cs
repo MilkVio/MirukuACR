@@ -130,7 +130,7 @@ internal sealed class ReaperDebugLog
         if (!_combat) ClearPending();
     }
 
-    public void Frame(ReaperState state, ReaperBurstPlanner planner, string qts, int windowVersion, string window, uint castId)
+    public void Frame(ReaperState state, IReaperPlanner planner, string qts, int windowVersion, string window, uint castId)
     {
         _state = state; Volatile.Write(ref _playerId, state.PlayerId);
         if (!_enabled) return;
@@ -272,5 +272,5 @@ internal sealed class ReaperDebugLog
     }
 
     private static string Compact(ReaperState s) => string.Create(CultureInfo.InvariantCulture,
-        $"红绿={s.Soul}/{s.Shroud} 魂={s.Lemure}/{s.Void} 镰={s.Reavers} 附体={s.Enshrouded:F2} 免费={s.FreeEnshroud:F2} 隐匿={s.Occulta:F2} 完人={s.Perfectio:F2} 祭性={s.Oblatio:F2} 月={s.Soulsow} GCD={s.Gcd:F3}/{s.ReapGcd:F3} 复唱余={s.GcdLeft:F3} 团契读条={s.CommunioCast:F3} AC={s.CircleCd:F2}/{s.CircleLeft:F2} 暴食={s.GluttonyCd:F2} 附体CD={s.EnshroudCd:F2} 切割={s.SliceCharges:F3} 烙印={s.DeathDesign:F2} 连击={s.ComboNext}/{s.ComboLeft:F2} 祭品={s.SacrificeStacks}/{s.SacrificeLeft:F2} 解锁={s.Bloodsown:F2} 距离={s.Distance:F2} 移动={s.Moving} 窗口={s.WindowLeft:F2} 留={s.GoalSoul}/{s.GoalShroud}");
+        $"红绿={s.Soul}/{s.Shroud} 魂={s.Lemure}/{s.Void} 镰={s.Reavers} 附体={s.Enshrouded:F2} 免费={s.FreeEnshroud:F2} 隐匿={s.Occulta:F2} 完人={s.Perfectio:F2} 祭性={s.Oblatio:F2} 月={s.Soulsow} GCD={s.Gcd:F3}/{s.ReapGcd:F3} 复唱余={s.GcdLeft:F3} 团契复唱={s.CommunioGcd:F3} 团契读条={s.CommunioCast:F3} AC={s.CircleCd:F2}/{s.CircleLeft:F2} 暴食={s.GluttonyCd:F2} 附体CD={s.EnshroudCd:F2} 切割={s.SliceCharges:F3} 烙印={s.DeathDesign:F2} 连击={s.ComboNext}/{s.ComboLeft:F2} 祭品={s.SacrificeStacks}/{s.SacrificeLeft:F2} 解锁={s.Bloodsown:F2} 距离={s.Distance:F2} 移动={s.Moving} 窗口={s.WindowLeft:F2} 留={s.GoalSoul}/{s.GoalShroud}");
 }

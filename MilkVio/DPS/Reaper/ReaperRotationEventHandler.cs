@@ -8,6 +8,7 @@ namespace MilkVio.DPS.Reaper
     {
         public void OnUpdate()
         {
+            ReaperBattleData.Instance.SynchronizeLevel();
             ReaperBattleData.Instance.AutoSoulsow.Tick();
             ReaperBattleData.Instance.DmuOpener.Tick();
             ReaperRotation.UpdatePlanner();

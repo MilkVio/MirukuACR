@@ -54,6 +54,8 @@ public readonly record struct ReaperState
     public float Occulta { get; init; }
     public float Perfectio { get; init; }
     public float Oblatio { get; init; }
+    public float PositionalBuff { get; init; }
+    public float ReapingBuff { get; init; }
     public bool Soulsow { get; init; }
     public bool CircleQt { get; init; }
     public bool FastCircle { get; init; }
@@ -73,12 +75,13 @@ public readonly record struct ReaperState
     public int GoalSoul { get; init; }
     public int GoalShroud { get; init; }
 
-    public bool HasTiming => Gcd > 0 && ReapGcd > 0 && CommunioGcd > 0 && PerfectioGcd > 0;
+    public bool HasTiming => Gcd > 0 && ReapGcd > 0 && CommunioGcd > 0
+        && (ReaperLevelRules.UsesLevel90(Level) || PerfectioGcd > 0);
     public bool Locked => Enshrouded > 0 || Reavers > 0;
     public bool CanEnshroud => Level >= 80 && EnshroudQt && !Locked && Perfectio <= 0
         && (!WindowActive || (WindowLeft > 0 ? WindowLeft : WindowLimit) > 0.8f)
         && EnshroudCd <= 0 && (Shroud >= 50 || FreeEnshroud > 0);
-    public bool CanHarvest => Level >= 88 && !Locked && Bloodsown <= 0 && SacrificeStacks > 0
+    public bool CanHarvest => Level >= 88 && CircleQt && !Locked && Bloodsown <= 0 && SacrificeStacks > 0
         && FreeEnshroud <= 0 && Perfectio <= 0 && Distance <= GameData.GetCurrentAttackRange(15);
     public float ShroudFinishIn => GcdLeft + Math.Max(0, Lemure - 1) * ReapGcd + CommunioCast + 0.65f;
     public bool CanHarvestMoonForRange => Alive && HasTarget && HasTiming && Level >= 90 && !CastingCommunio && Lemure > 0

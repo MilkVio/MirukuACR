@@ -40,7 +40,7 @@ public static class ReaperResources
         if (!s.WindowActive || !s.HasTiming || s.CircleLeft <= 0 && HasWindowCircle(s)) return false;
         // 已有资源及少量回资源技能需要的时间，不固定为最后20秒。
         var shrouds = s.EnshroudQt ? Math.Max(0, s.Shroud - s.GoalShroud) / 50 : 0;
-        var free = s.EnshroudQt && (s.FreeEnshroud > 0 || s.SacrificeStacks > 0) ? 1 : 0;
+        var free = s.EnshroudQt && (s.FreeEnshroud > 0 || s.CircleQt && s.SacrificeStacks > 0) ? 1 : 0;
         var reds = s.BloodQt || s.GluttonyQt ? Math.Max(0, s.Soul - s.GoalSoul) / 50 : 0;
         if (s.SliceQt && s.SliceCharges >= 1 && (s.BloodQt || s.GluttonyQt)) reds++;
         var duration = (shrouds + free) * (4 * s.ReapGcd + s.CommunioGcd)
@@ -170,9 +170,8 @@ public static class ReaperResources
                 || soul >= 50 && NeedsGluttonyPreparation(s, dot, time, weave)))
                 dot = Math.Min(time + 60, Math.Max(dot, time) + 30);
             else if (usePerfectio) perfectioUsed = true;
-            else if (!harvestUsed && s.SacrificeStacks > 0 && s.Bloodsown <= time && s.SacrificeLeft > time
-                && s.FreeEnshroud <= 0 && s.Perfectio <= 0
-                && (s.EnshroudQt || s.SacrificeLeft - time <= s.Gcd + 1)) harvestUsed = true;
+            else if (!harvestUsed && s.CircleQt && s.SacrificeStacks > 0 && s.Bloodsown <= time && s.SacrificeLeft > time
+                && s.FreeEnshroud <= 0 && s.Perfectio <= 0) harvestUsed = true;
             else if (s.SliceQt && charges >= 1 && soul <= 50) { charges--; gain = 50; }
             else gain = 10;
             lost += Math.Max(0, soul + gain - 100);
@@ -207,18 +206,26 @@ public static class ReaperResources
 
     public readonly record struct PreparationEstimate(bool Ready, float CircleAt, int Shroud, string Reason);
 
-    internal static bool CanSkipFirstDesign(ReaperState s, float firstReapAt, out float circleAt)
+    internal static bool CanSkipFirstDesign(ReaperState s, float firstReapAt, out float circleAt, float? earliestCircleAt = null)
     {
         circleAt = float.PositiveInfinity;
         if (!s.HasTiming || !s.CircleQt || !s.EnshroudQt || !float.IsFinite(firstReapAt)
             || !float.IsFinite(s.CircleCd) || s.CircleCd < 0) return false;
         circleAt = Math.Max(0, Math.Max(s.CircleCd, firstReapAt + WeaveTime));
-        if (circleAt + WeaveTime + 0.05f > firstReapAt + s.ReapGcd) return false;
-
         var harvestAt = firstReapAt + 4 * s.ReapGcd + s.CommunioGcd;
-        if (harvestAt < circleAt + 6.7f) return false;
         var secondStart = harvestAt + s.Gcd;
         var communioAt = secondStart + 4 * s.ReapGcd + s.CommunioCast;
+        if (earliestCircleAt.HasValue)
+        {
+            // 提前开环使用调用方给出的插入时刻，仍须覆盖双团契。
+            var early = Math.Max(s.CircleCd, Math.Max(0, earliestCircleAt.Value));
+            var fitsBefore = early + WeaveTime + 0.05f <= firstReapAt;
+            var fitsAfter = early >= firstReapAt && early + WeaveTime + 0.05f <= firstReapAt + s.ReapGcd;
+            if ((fitsBefore || fitsAfter) && communioAt + 0.15f < early + 20 && harvestAt >= early + 6.7f)
+                circleAt = early;
+        }
+        if (circleAt + WeaveTime + 0.05f > firstReapAt + s.ReapGcd) return false;
+        if (harvestAt < circleAt + 6.7f) return false;
         if (communioAt + 0.15f >= circleAt + 20
             || s.WindowActive && communioAt + 0.15f >= s.WindowLeft) return false;
 
@@ -265,7 +272,8 @@ public static class ReaperResources
                 var designUntil = dot;
                 if (s.DotQt && dot < prepareAt + 10)
                     designUntil = Math.Min(prepareAt + 60, Math.Max(dot, prepareAt) + 30);
-                if (CanSkipFirstDesign(s with { DeathDesign = designUntil }, prepareAt + 2 * s.Gcd, out var earlyCircle))
+                if (CanSkipFirstDesign(s with { DeathDesign = designUntil }, prepareAt + 2 * s.Gcd, out var earlyCircle,
+                    earliestCircleAt: ReaperLevelRules.UsesLevel90(s.Level) && s.FastCircle ? prepareAt + s.Gcd + 2 * WeaveTime : null))
                 {
                     circleAt = earlyCircle;
                     finishAt -= s.Gcd;

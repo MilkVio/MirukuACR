@@ -33,10 +33,10 @@ public class 收获月Gcd : IDecisionResolver
         if (me.DistanceToMe() > currentMeleeRange) return new CheckResult(true, "远离近战距离 收获月止损");
 
         if (ReaperBattleData.Instance.Window.Active)
-            return new CheckResult(ReaperBattleData.Instance.Planner.GcdAction == ReaperSkill.收获月, "按输出窗口安排收获月");
+            return new CheckResult(ReaperBattleData.Instance.ActivePlanner.GcdAction == ReaperSkill.收获月, "按输出窗口安排收获月");
         if (!PromeSettings.Instance.GetQt(ReaperQt.倾泻资源)) return new CheckResult(false, "近战距离内 未开启倾泻资源 留着收获月");
 
-        return new CheckResult(ReaperBattleData.Instance.Planner.GcdAction == ReaperSkill.收获月, "按倾泻规划使用收获月");
+        return new CheckResult(ReaperBattleData.Instance.ActivePlanner.GcdAction == ReaperSkill.收获月, "按倾泻规划使用收获月");
     }
 
     public PAction GetAction()

@@ -11,7 +11,7 @@ public static class ReaperHelper
 {
     public static bool QtAllows(uint id) => id switch
     {
-        ReaperSkill.神秘环 => PromeSettings.Instance.GetQt(ReaperQt.神秘环),
+        ReaperSkill.神秘环 or ReaperSkill.大丰收 => PromeSettings.Instance.GetQt(ReaperQt.神秘环),
         ReaperSkill.夜游魂衣 => PromeSettings.Instance.GetQt(ReaperQt.附体),
         ReaperSkill.暴食 => PromeSettings.Instance.GetQt(ReaperQt.暴食),
         ReaperSkill.隐匿挥割 or ReaperSkill.绞决爪 or ReaperSkill.缢杀爪 => PromeSettings.Instance.GetQt(ReaperQt.隐匿挥割),
