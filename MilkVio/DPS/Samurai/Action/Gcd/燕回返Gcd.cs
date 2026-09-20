@@ -3,6 +3,7 @@ using PromeRotation.Extensions;
 using PromeRotation.Managers;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai.Action.Gcd;
 
@@ -15,6 +16,11 @@ public class 燕回返Gcd : IDecisionResolver
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
         if (Core.Me.DistanceToMe() > currentAttackRange) return new CheckResult(false, $"当前目标过远（>{currentAttackRange}m）");
+        if (Samurai100Helper.Enabled)
+        {
+            var use = Samurai100Burst.ShouldUseTsubame(out var reason);
+            return new CheckResult(use, reason);
+        }
         var isCanUse = SamuraiHelper.Has燕回返();
         var leftTime = SamuraiHelper.燕回返LeftTime();
         

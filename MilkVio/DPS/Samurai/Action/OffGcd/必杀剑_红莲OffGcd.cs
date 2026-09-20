@@ -13,13 +13,15 @@ public class 必杀剑_红莲OffGcd : IDecisionResolver
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
         if (!PromeSettings.Instance.GetQt(SAMQt.AOE)) return new CheckResult(false, "未开启AOEQT");
+        if (!SamuraiHelper.AllowSenei) return new CheckResult(false, "未开启闪影红莲QT");
+        if (Core.Me.DistanceToMe() > GameData.GetCurrentAttackRange(10)) return new CheckResult(false, "红莲距离不足");
         
         var me = Core.Me;
         var kenki = JobGaugeHelper.SAM.剑气;
         var isCanUse = SAMSkill.必杀剑_红莲.GetActionCooldown() == 0 && kenki >= 25 && TargetHelper.EnemyInRange(10) >= 3;
         var hasBoost = me.HasStatus(SAMBuff.风月);
             
-        if (!PromeSettings.Instance.GetQt(SAMQt.不打120) && isCanUse)
+        if (isCanUse)
         {
             if (PromeSettings.Instance.GetQt(SAMQt.倾泻资源))
             {

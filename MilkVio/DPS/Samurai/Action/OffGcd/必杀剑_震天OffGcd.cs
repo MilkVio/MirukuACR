@@ -5,6 +5,7 @@ using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai.Action.OffGcd;
 
@@ -20,6 +21,12 @@ public class 必杀剑_震天OffGcd : IDecisionResolver
     {
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
+        if (!SamuraiHelper.AllowShinten) return new CheckResult(false, "未开启震天QT");
+        if (Samurai100Helper.Enabled)
+        {
+            var use = Samurai100Burst.ShouldUseShinten(out var reason);
+            return new CheckResult(use, reason);
+        }
         var kenki = JobGaugeHelper.SAM.剑气;
         var isCanUse = SAMSkill.必杀剑_震天.GetActionCooldown() == 0 && kenki >= 25;
         var 必杀剑cd = SAMSkill.必杀剑_闪影.GetActionCooldown();
@@ -37,7 +44,7 @@ public class 必杀剑_震天OffGcd : IDecisionResolver
                 return new CheckResult(false, "先打残心");
             }
             
-            if (意气冲天cd < 5 && kenki >= 50)
+            if (SamuraiHelper.AllowIkishoten && 意气冲天cd < 5 && kenki >= 50)
             {
                 return new CheckResult(true, $"120前泄");
             }

@@ -4,6 +4,7 @@ using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai.Action.OffGcd;
 
@@ -13,6 +14,11 @@ public class 明镜止水OffGcd : IDecisionResolver
     {
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
+        if (Samurai100Helper.Enabled)
+        {
+            var use = Samurai100Helper.ShouldUseMeikyo(out var reason);
+            return new CheckResult(use, reason);
+        }
         // 有一层 自身没有明镜buff
         var charge = SamuraiHelper.明镜止水层数();
         var isCanUse = charge >= 1f && !Core.Me.HasStatus(SAMBuff.明镜止水);

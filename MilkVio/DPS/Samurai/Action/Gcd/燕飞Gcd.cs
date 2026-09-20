@@ -2,6 +2,7 @@ using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai.Action.Gcd;
 
@@ -15,6 +16,8 @@ public class 燕飞Gcd : IDecisionResolver
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
         if (Core.Me.DistanceToMe() > currentAttackRange) return new CheckResult(false, $"当前目标过远（>{currentAttackRange}m）");
+        if (Samurai100Helper.Enabled && Core.Me.DistanceToMe() > GameData.GetCurrentAttackRange(6))
+            return new CheckResult(true, "回返也够不到，使用燕飞");
         
         if (Core.Me.DistanceToMe() > currentMeleeRange && !SamuraiHelper.Has燕回返())
         {

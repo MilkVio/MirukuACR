@@ -2,6 +2,7 @@ using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai.Action.Gcd;
 
@@ -14,6 +15,15 @@ public class 明镜Gcd : IDecisionResolver
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
         if (Core.Me.DistanceToMe() > CurrentMeleeRange) return new CheckResult(false, $"当前目标过远（>{CurrentMeleeRange}m）");
         var isCanUse = Core.Me.HasStatus(SAMBuff.明镜止水);
+        if (Samurai100Helper.Enabled)
+        {
+            if (!isCanUse || Samurai100Helper.MeikyoStacks <= 0)
+                return new CheckResult(false, "下个GCD没有可用明镜");
+            var type = Samurai100Helper.GetMeikyoType();
+            if (type == Combo类型.雪 && !PromeSettings.Instance.GetQt(SAMQt.倾泻资源))
+                return new CheckResult(true, "异常兜底：已有明镜仅缺雪，月花无法继续");
+            return new CheckResult(true, type == Combo类型.无 ? Samurai100Helper.GetWaitReason() : $"明镜取{type}");
+        }
         
         if (Core.Me.DistanceToMe() <= CurrentMeleeRange && isCanUse)
         {

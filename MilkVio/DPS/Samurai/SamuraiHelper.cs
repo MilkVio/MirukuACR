@@ -3,11 +3,18 @@ using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai;
 
 public static class SamuraiHelper
 {
+    public static bool AllowIkishoten => !PromeSettings.Instance.GetQt(SAMQt.不打120);
+    public static bool AllowSenei => PromeSettings.Instance.GetQt(SAMQt.闪影红莲);
+    public static bool AllowOgi => PromeSettings.Instance.GetQt(SAMQt.奥义斩浪);
+    public static bool AllowShinten => PromeSettings.Instance.GetQt(SAMQt.震天);
+    public static bool AllowZanshin => PromeSettings.Instance.GetQt(SAMQt.残心);
+
     /// <summary>
     /// 获取1连击调整后的Id
     /// </summary>
@@ -19,7 +26,7 @@ public static class SamuraiHelper
         
         if (isAoe)
         {
-            if (level < 92)
+            if (level < 86)
             {
                 return SAMSkill.风雅;
             }
@@ -40,6 +47,7 @@ public static class SamuraiHelper
     
     public static bool IsComboEnd()
     {
+        if (Samurai100Helper.Enabled) return Samurai100Helper.GetComboId() == 0;
         var lastActionId = ActionHelper.GetLastComboID();
         if (lastActionId == 0) return true;
         
@@ -59,11 +67,11 @@ public static class SamuraiHelper
         
         if (count == 2 && has天道)
         {
-            return 居合类型.天道雪月花;
+            return 居合类型.天道五剑;
         }
         if (count == 3 && has天道)
         {
-            return 居合类型.天道五剑;
+            return 居合类型.天道雪月花;
         }
         
         switch (count)
@@ -191,6 +199,11 @@ public static class SamuraiHelper
 
     public static PAction? GetCurrentMsyPAction()
     {
+        if (Samurai100Helper.Enabled)
+        {
+            var action = Samurai100Helper.GetComboAction();
+            return action == 0 ? null : new PAction(action, ActionType.Gcd, ActionTargetType.Target);
+        }
         var lastComboId = ActionHelper.GetLastComboID();
         var bestComboType = GetBestComboType();
         // 选择分支
@@ -225,10 +238,22 @@ public static class SamuraiHelper
         return null;
     }
 
+    public static float GetOwnHiganbanaLeftTime()
+    {
+        var me = Core.Me;
+        var target = Core.Target;
+        if (me == null || target == null) return 0;
+        foreach (var status in target.StatusList)
+            if (status.StatusId == SAMBuff.彼岸花 && status.SourceId == me.EntityId)
+                return Math.Abs(status.RemainingTime);
+        return 0;
+    }
+
     public static 居合类型 GetBestJuhe()
     {
-        var isTargetHasBianhua = Core.Target.HasStatus(SAMBuff.彼岸花);
-        var bianhuaLeftTime = Core.Target.GetStatusLeftTime(SAMBuff.彼岸花);
+        if (Samurai100Helper.Enabled) return Samurai100Helper.GetBestIaijutsu();
+        var bianhuaLeftTime = GetOwnHiganbanaLeftTime();
+        var isTargetHasBianhua = bianhuaLeftTime > 0;
         
         if (JobGaugeHelper.SAM.GetSenCount() == 1)
         {
@@ -256,6 +281,7 @@ public static class SamuraiHelper
 
     public static Combo类型 GetBestMingJingType()
     {
+        if (Samurai100Helper.Enabled) return Samurai100Helper.GetMeikyoType();
         var me = Core.Me;
         var moonLeftTime = me.GetStatusLeftTime(SAMBuff.风月);
         var hanaLeftTime = me.GetStatusLeftTime(SAMBuff.风花);
@@ -363,53 +389,10 @@ public static class SamuraiHelper
         return real;
     }
 
-    public static Positional GetNeedPositional()
+    public static Positional GetNeedPositional(uint actionId)
     {
-        var needPostional = Positional.None;
-        var hasMingjing = Core.Me.HasStatus(SAMBuff.明镜止水);
-        
-        if (hasMingjing)
-        {
-            var type = SamuraiHelper.GetBestMingJingType();
-            switch (type)
-            {
-                case Combo类型.月:
-                    needPostional = Positional.Rear;
-                    break;
-                case Combo类型.花:
-                    needPostional = Positional.Flank;
-                    break;
-                case Combo类型.雪:
-                    needPostional = Positional.None;
-                    break;
-            }
-        }
-        else // !hasMingjing
-        {
-            var msyAction = SamuraiHelper.GetCurrentMsyPAction();
-
-            if (msyAction == null)
-            {
-                needPostional = Positional.None;
-            }
-            else
-            {
-                var actionId = msyAction.ActionId;
-                switch (actionId)
-                {
-                    case SAMSkill.月光:
-                        needPostional = Positional.Rear;
-                        break;
-                    case SAMSkill.花车:
-                        needPostional = Positional.Flank;
-                        break;
-                    default:
-                        needPostional = Positional.None;
-                        break;
-                }
-            }
-        }
-
-        return needPostional;
+        if (actionId == SAMSkill.月光) return Positional.Rear;
+        if (actionId == SAMSkill.花车) return Positional.Flank;
+        return Positional.None;
     }
 }

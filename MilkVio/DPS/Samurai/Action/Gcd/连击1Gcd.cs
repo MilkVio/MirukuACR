@@ -2,6 +2,7 @@ using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai.Action.Gcd;
 
@@ -13,6 +14,8 @@ public class 连击1Gcd : IDecisionResolver
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
         if (Core.Me.DistanceToMe() > CurrentMeleeRange) return new CheckResult(false, $"当前目标过远（>{CurrentMeleeRange}m）");
+        if (Samurai100Helper.Enabled)
+            return new CheckResult(Samurai100Helper.GetComboAction() == SAMSkill.晓风, "百级重新起连击");
         
         if (Core.Me.DistanceToMe() <= CurrentMeleeRange)
         {

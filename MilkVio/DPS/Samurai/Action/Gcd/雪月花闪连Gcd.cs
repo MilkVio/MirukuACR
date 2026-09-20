@@ -3,6 +3,7 @@ using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai.Action.Gcd;
 
@@ -15,6 +16,12 @@ public class 雪月花闪连Gcd : IDecisionResolver
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
         if (Core.Me.DistanceToMe() > CurrentMeleeRange) return new CheckResult(false, $"当前目标过远（>{CurrentMeleeRange}m）");
+        if (Samurai100Helper.Enabled)
+        {
+            if (Samurai100Helper.GetComboId() == 0) return new CheckResult(false, "需要重新起连击");
+            var action = Samurai100Helper.GetComboAction();
+            return new CheckResult(true, action == 0 ? Samurai100Helper.GetWaitReason() : "续连击或垫刀");
+        }
         var isCanUse = lastComboId == SamuraiHelper.Get1ComboActionId(false) || lastComboId == SAMSkill.阵风 || lastComboId == SAMSkill.士风;
         
         if (Core.Me.DistanceToMe() <= CurrentMeleeRange && isCanUse)
@@ -25,7 +32,7 @@ public class 雪月花闪连Gcd : IDecisionResolver
         return new CheckResult(false, "当前不满足任何条件");
     }
 
-    public PAction GetAction()
+    public PAction? GetAction()
     {
         return SamuraiHelper.GetCurrentMsyPAction();
     }

@@ -1,116 +1,54 @@
-using System.Numerics;
-using ECommons.DalamudServices;
 using PromeRotation.Data;
-using PromeRotation.Extensions;
-using PromeRotation.Helpers;
 using PromeRotation.Rotation;
-using MilkVio.DPS.Ninja;
-using MilkVio.DPS.Ninja.NinjaData;
-using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
-namespace MilkVio.DPS.Samurai
+namespace MilkVio.DPS.Samurai;
+
+public class SamuraiRotationEventHandler : IRotationEventHandler
 {
-    public class SamuraiRotationEventHandler : IRotationEventHandler
+    private readonly SamuraiRotation _rotation;
+
+    public SamuraiRotationEventHandler(SamuraiRotation rotation) => _rotation = rotation;
+
+    public void OnUpdate()
     {
-        private bool tpReady = true;
-        
-        // 每帧都会执行一次下面的方法
-        public void OnUpdate()
-        {
-            
-        }
+        _rotation.UpdatePlanning();
+        _rotation.UpdatePrediction();
+        _rotation.UpdateDebugLog();
+    }
 
-        // 非战斗状态下每帧都会执行一次下面的方法
-        public void OnOutOfBattleUpdate()
-        {
-            
-        }
+    public void OnOutOfBattleUpdate()
+    {
+    }
 
-        // 交战状态变为True的时候会执行一次下面的代码
-        public void OnBattleStarted()
-        {
-            
-        }
-        
-        // 这里战斗中每帧都会执行一次下面的方法
-        public void OnBattleUpdate()
-        {
-            var target = Core.Target;
-            if (target == null) return;
+    public void OnBattleStarted()
+    {
+        _rotation.ResetPrediction();
+        _rotation.UpdateDebugLog();
+        _rotation.DebugLog.CombatStarted(Environment.TickCount64);
+    }
 
-            if (!PromeSettings.Instance.GetQt(SAMQt.TP身位))
-                return;
-            
-            if (SamuraiHelper.GetBestJuhe() != 居合类型.无)
-            {
-                return;
-            }
-            
-            if (Core.Me.IsCasting)
-            {
-                return;
-            }
+    public void OnBattleUpdate()
+    {
+    }
 
-            if (Core.Me.HasStatus(SAMBuff.奥义浪斩预备))
-            {
-                return;
-            }
-            
-            // 先判断是否需要 TP 身位
-            Positional need = GetNeededStance();
-            if (need == Positional.None)
-                return;
+    public void OnNoTarget()
+    {
+    }
 
-            Positional my = TargetHelper.GetTargetPositional();
-            if (my == need)
-                return;
+    public void OnBattleEnded()
+    {
+        Samurai100Planning.Reset("战斗结束");
+        _rotation.ResetPrediction();
+        _rotation.DebugLog.CombatEnded(Environment.TickCount64, "战斗结束");
+        PromeSettings.Instance.OpenerHasBeenExecuted = false;
+    }
 
-            if (Core.Me.HasStatus(1250))
-                return;
-
-            // 获取GCDRemain
-            float remain = ActionHelper.GetGcdRemain();
-
-            // 新GCD开始 → 重置可TP
-            if (remain > 1.0f)
-            {
-                tpReady = true;
-                return;
-            }
-
-            // 进入GCD结尾（<0.05），且标志位允许 → 执行TP，然后锁定
-            if (tpReady && remain < 0.03f)
-            {
-                Vector3 posA = TargetHelper.GetStancePoint(target, need);
-                Vector3 posB = Core.Me.Position;
-                // Svc.Chat.PrintError($"{posA} {posB}");
-                _ = HackHelper.TeleportWithReturn(posA, posB, 80);
-                
-                tpReady = false;
-            }
-        }
-        
-        private static Positional GetNeededStance()
-        {
-            return SamuraiHelper.GetNeedPositional();
-        }
-        
-        // 战斗中没有可攻击目标时每帧都会执行一次下面的方法
-        public void OnNoTarget()
-        {
-        }
-
-        // 交战状态变为False的时候会执行一次下面的代码
-
-        public void OnBattleEnded()
-        {
-            PromeSettings.Instance.OpenerHasBeenExecuted = false;
-        }
-
-        // 切换区域会执行一次下面的方法
-        public void OnTerritoryChanged(ushort territoryId)
-        {
-            
-        }
+    public void OnTerritoryChanged(ushort territoryId)
+    {
+        Samurai100Planning.Reset("切换地图");
+        _rotation.ResetPrediction();
+        _rotation.DebugLog.CombatEnded(Environment.TickCount64, $"切换地图{territoryId}");
+        PromeSettings.Instance.OpenerHasBeenExecuted = false;
     }
 }

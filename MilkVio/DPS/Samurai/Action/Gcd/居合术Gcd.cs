@@ -18,7 +18,7 @@ public class 居合术Gcd : IDecisionResolver
         
         if (Core.Me.DistanceToMe() <= CurrentMeleeRange && SamuraiHelper.GetBestJuhe() != 居合类型.无)
         {
-            return new CheckResult(true, $"{CurrentMeleeRange}");
+            return new CheckResult(true, $"使用{SamuraiHelper.GetBestJuhe()}");
         }
         
         return new CheckResult(false, "当前不满足任何条件");
