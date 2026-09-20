@@ -1,12 +1,92 @@
+using Dalamud.Game.ClientState.Conditions;
+using ECommons.DalamudServices;
+using ECommons.ExcelServices;
+using ECommons.Logging;
 using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using MilkVio.DPS.Machinist.MCHData;
+using GameActionManager = FFXIVClientStructs.FFXIV.Client.Game.ActionManager;
 
 namespace MilkVio.DPS.Machinist;
 
 public static class MachinistHelper
 {
+    // 当前引用的 SDK 尚未暴露此属性，按宿主运行时版本读写。
+    private static readonly System.Reflection.PropertyInfo? MaxWeavesSetting = typeof(HackSettings).GetProperty("MaxOgcdsPerGcd");
+    private static readonly MachinistWeaveLimiter WeaveLimiter = new();
+    private static bool _weaveLimitEnabled;
+    private static bool _weaveSettingWarningLogged;
+
+    public static void EnterWeaveLimit()
+    {
+        _weaveLimitEnabled = true;
+        ResetWeaveLimit();
+        UpdateWeaveLimit();
+    }
+
+    public static void ExitWeaveLimit()
+    {
+        _weaveLimitEnabled = false;
+        ResetWeaveLimit();
+    }
+
+    public static void ResetWeaveLimit()
+    {
+        WeaveLimiter.Reset();
+        SetMaxWeaves(2);
+    }
+
+    public static unsafe void UpdateWeaveLimit()
+    {
+        if (!_weaveLimitEnabled) return;
+        var me = Core.Me;
+        if (me == null || me.IsDead || me.ClassJob.RowId != (uint)Job.MCH || !GameData.IsInCombat()
+            || Svc.Condition[ConditionFlag.BetweenAreas] || Svc.Condition[ConditionFlag.BetweenAreas51])
+        {
+            ResetWeaveLimit();
+            return;
+        }
+
+        var manager = GameActionManager.Instance();
+        var recast = manager == null ? null : manager->GetRecastGroupDetail(57);
+        if (recast == null)
+        {
+            ResetWeaveLimit();
+            return;
+        }
+
+        SetMaxWeaves(WeaveLimiter.Update(Environment.TickCount64,
+            me.HasStatus(MCHStatus.过热), me.GetStatusLeftTime(MCHStatus.过热),
+            recast->IsActive, recast->ActionId, recast->Total, recast->Elapsed));
+    }
+
+    private static void SetMaxWeaves(int count)
+    {
+        if (MaxWeavesSetting is not { CanRead: true, CanWrite: true } || MaxWeavesSetting.PropertyType != typeof(int))
+        {
+            WarnWeaveSetting("宿主未提供可写的 MaxOgcdsPerGcd 设置");
+            return;
+        }
+        try
+        {
+            var settings = PromeSettings.Instance.Hacks;
+            if (MaxWeavesSetting.GetValue(settings) is int current && current != count)
+                MaxWeavesSetting.SetValue(settings, count);
+        }
+        catch (Exception ex)
+        {
+            WarnWeaveSetting(ex.Message);
+        }
+    }
+
+    private static void WarnWeaveSetting(string message)
+    {
+        if (_weaveSettingWarningLogged) return;
+        _weaveSettingWarningLogged = true;
+        PluginLog.Warning($"[Machinist] 无法设置过热能力技上限：{message}");
+    }
+
     public static PAction GetBaseAction()
     {
         var lastComboId = ActionHelper.GetLastComboID();

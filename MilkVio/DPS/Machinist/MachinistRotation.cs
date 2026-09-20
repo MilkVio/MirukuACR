@@ -24,7 +24,7 @@ using PromeRotation.Windows;
 namespace MilkVio.DPS.Machinist;
 
 [RotationMetadata((uint)Job.MCH, "玉玉机工", "MilkVio", GlobalVersion.Version, ContentScope = AcrContentScope.HighEnd)]
-public class MachinistRotation : IRotation
+public class MachinistRotation : IRotation, IRotationLifecycle
 {
     // 创建一个属于该职业的回调
     private readonly IRotationEventHandler _eventHandler = new MachinistRotationEventHandler();
@@ -56,6 +56,7 @@ public class MachinistRotation : IRotation
         {"机工80绝亚DollSkip起手", typeof(MCH_80_TEADS)},
         {"机工90绝欧起手", typeof(MCH_90_OMG)},
         {"机工100通用起手", typeof(MCH_100_G)},
+        {"机工妖星起手", typeof(MCH_100_DMU)},
     };
     
     public MachinistRotation()
@@ -113,6 +114,10 @@ public class MachinistRotation : IRotation
         HotkeyManager.Instance.AddHotkeyPanel(hotkeyPanel);
     }
     
+    public void OnEnterAcr() => MachinistHelper.EnterWeaveLimit();
+
+    public void OnExitAcr() => MachinistHelper.ExitWeaveLimit();
+
     // 该职业的起手
     public IOpener? GetOpener()
     {

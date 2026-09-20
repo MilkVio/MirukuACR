@@ -20,6 +20,7 @@ public class MCHSkill
     public const uint 毒菌冲击 = 16499;
     public const uint 火焰喷射器 = 7418;
     //特殊GCD
+    public const uint 热冲击 = 7410;
     public const uint 烈焰弹 = 36978;
     public const uint 自动弩 = 16497;
     //伤害OFFGCD
