@@ -49,6 +49,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
     public static IReadOnlyDictionary<string, bool> QtList { get; } = new Dictionary<string, bool>
     {
         {ReaperQt.神秘环, true},
+        {ReaperQt.大丰收, true},
         {ReaperQt.附体, true},
         {ReaperQt.灵魂割, true},
         
@@ -104,6 +105,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
         // 画QT
         foreach (var (name, def) in QtList)
             PromeSettings.Instance.AddQt(name, def);
+        PromeSettings.Instance.HiddenQts.Add(ReaperQt.大丰收);
     }
 
     public IOpener? GetOpener()
@@ -184,7 +186,7 @@ public class ReaperRotation : IRotation, IRotationLifecycle
             // 只尝试已选中的大丰收；短暂不可用不取消爆发，也不落到123。
             var resolver = new 大丰收();
             var harvest = resolver.GetAction();
-            var check = Planner.IsOpener ? new CheckResult((fresh with { CircleQt = true }).CanHarvest, "固定起手大丰收尚未解锁") : resolver.Check();
+            var check = Planner.IsOpener ? new CheckResult((fresh with { CircleQt = true, HarvestQt = true }).CanHarvest, "固定起手大丰收尚未解锁") : resolver.Check();
             uint? nativeStatus = null;
             if (check.Success && (Planner.IsOpener || ReaperHelper.QtAllows(harvest.ActionId))
                 && ReaperHelper.当前可执行(harvest, out nativeStatus))

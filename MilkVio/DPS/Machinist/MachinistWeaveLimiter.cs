@@ -36,7 +36,7 @@ internal sealed class MachinistWeaveLimiter
         _lastOverheatLeft = hasOverheat ? overheatLeft : 0;
 
         var shortGcd = gcdActive
-                       && gcdAction is MCHSkill.热冲击 or MCHSkill.烈焰弹
+                       && gcdAction is MCHSkill.热冲击 or MCHSkill.烈焰弹 or MCHSkill.自动弩
                        && float.IsFinite(gcdTotal) && gcdTotal > 0 && gcdTotal <= 1.6f
                        && float.IsFinite(gcdElapsed) && gcdElapsed >= 0 && gcdElapsed < gcdTotal;
         if (shortGcd)

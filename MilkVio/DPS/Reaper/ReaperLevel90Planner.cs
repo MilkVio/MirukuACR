@@ -100,7 +100,7 @@ internal sealed class ReaperLevel90Planner : IReaperPlanner
         SetPhase(ReaperBurstPhase.起手);
     }
     private static ReaperState OpenerState(ReaperState s) => s with
-    { CircleQt = true, EnshroudQt = true, GluttonyQt = true, SliceQt = true, DotQt = true, DumpQt = false, WindowActive = false };
+    { CircleQt = true, HarvestQt = true, EnshroudQt = true, GluttonyQt = true, SliceQt = true, DotQt = true, DumpQt = false, WindowActive = false };
 
     private void SetPhase(ReaperBurstPhase phase)
     { Phase = phase; _phaseAt = _progressAt = Current.Now; }
@@ -137,6 +137,13 @@ internal sealed class ReaperLevel90Planner : IReaperPlanner
             if (!s.HasTarget || s.Now - _phaseAt > 40000) Cancel("起手中断");
             else { Reason = "90级标准起手"; BuildOpener(OpenerState(s)); UpdateQueues(OpenerState(s)); _previous = s; return; }
         }
+        if (_previous.Alive && s.HarvestQt != _previous.HarvestQt)
+        {
+            StopHarvestWait("大丰收QT变化"); _projection.Clear();
+            _retryAt = _simpleUntil = 0;
+        }
+        if (IsPlanned && !s.HarvestQt && !_harvestUsed)
+            Replan("大丰收关闭，按当前权限继续");
         if (Phase == ReaperBurstPhase.大丰收衔接 && !s.CircleQt && !_harvestUsed)
             Replan("120关闭，跳过大丰收衔接");
         if (s.IsDump != _previous.IsDump) Replan("倾泻模式变化");
@@ -151,7 +158,7 @@ internal sealed class ReaperLevel90Planner : IReaperPlanner
         if (s.HasTiming && s.CircleQt && s.CircleLeft <= 0 && s.Shroud >= 50 && !s.Locked && s.FreeEnshroud <= 0)
             ForecastGreen = ReaperResources.ForecastShroud(s, true);
         if (!IsPlanned && !s.IsDump && !IsSimple && !IsCoordinating && s.Now >= _retryAt
-            && s.HasTiming && s.Melee && s.CircleQt && s.EnshroudQt && s.DotQt && !s.Locked
+            && s.HasTiming && s.Melee && s.CircleQt && s.HarvestQt && s.EnshroudQt && s.DotQt && !s.Locked
             && s.Shroud >= 50 && s.FreeEnshroud <= 0 && s.CircleLeft <= 0 && s.CircleCd > 0
             && s.CircleCd <= s.PreparationLead
             && (!s.WindowActive || s.WindowLeft > s.CircleCd + 20 || ReaperResources.ForecastPreparation(s, false).Ready))
@@ -303,9 +310,11 @@ internal sealed class ReaperLevel90Planner : IReaperPlanner
         {
             if (s.CircleCd <= 0) { Cancel("准备未完成，按时开启神秘环"); return; }
             if (!s.Melee || s.Shroud < 50) { Cancel("双附体准备条件丢失"); return; }
-            GcdAction = s.DeathDesign < 10 ? ReaperSkill.死亡之影 : s.ComboAtRisk(s.DoubleDuration) ? s.ComboNext
+            var prepareDesign = ReaperResources.NeedsFastCircleDesign(s, _prepGcds);
+            GcdAction = prepareDesign && s.ComboAtRisk(s.Gcd) ? s.ComboNext
+                : s.DeathDesign < 10 || prepareDesign ? ReaperSkill.死亡之影 : s.ComboAtRisk(s.DoubleDuration) ? s.ComboNext
                 : s.SliceQt && s.SliceCharges >= 1 && s.Soul <= 50 ? ReaperSkill.灵魂切割 : Combo(s);
-            if (_prepGcds >= 2 && s.CanEnshroud && s.DeathDesign >= 10 && !s.ComboAtRisk(s.DoubleDuration)
+            if (_prepGcds >= 2 && s.CanEnshroud && s.DeathDesign >= 10 && !prepareDesign && !s.ComboAtRisk(s.DoubleDuration)
                 && s.CircleCd <= s.GcdLeft + s.ReapGcd + s.Gcd - .65f) OffGcdAction = ReaperSkill.夜游魂衣;
             return;
         }
@@ -322,6 +331,9 @@ internal sealed class ReaperLevel90Planner : IReaperPlanner
                         && Math.Abs(s.GcdLeft + s.GcdElapsed - s.ReapGcd) < .1f ? -s.GcdElapsed : float.NaN;
                     _skipFirstDot = ReaperResources.CanSkipFirstDesign(s, firstAt, out circleAt, earliestCircleAt: s.FastCircle ? 0 : null);
                 }
+                if (!_firstDot && s.FastCircle && !_skipFirstDot && s.Lemure is > 0 and < 4
+                    && s.CircleCd <= 0 && s.CircleLeft <= 0 && s.Now >= _shroudSyncUntil)
+                { Replan("快速神秘环：原插入位置已过，按实况开环"); return; }
                 if (!_firstDot && !_skipFirstDot && s.Lemure == 4 && s.Melee)
                 {
                     if (!s.DotQt) { Replan("烙印QT关闭，按实况开环"); return; }
@@ -413,7 +425,7 @@ internal sealed class ReaperLevel90Planner : IReaperPlanner
         if (s.CircleQt && s.CircleCd <= 0 && !IsCoordinating)
         { OffGcdAction = ReaperSkill.神秘环; return; }
         if (s.Locked || GcdAction is ReaperSkill.大丰收 or ReaperSkill.死亡之影) return;
-        var pendingHarvest = s.CircleQt && s.SacrificeStacks > 0 && s.SacrificeLeft > s.Bloodsown
+        var pendingHarvest = s.CircleQt && s.HarvestQt && s.SacrificeStacks > 0 && s.SacrificeLeft > s.Bloodsown
             && s.FreeEnshroud <= 0;
         if (s.CanEnshroud && s.Melee && !IsCoordinating)
         {
@@ -499,6 +511,7 @@ internal sealed class ReaperLevel90Planner : IReaperPlanner
     {
         if (_previous.CircleCd <= 1 && s.CircleCd > 60 && s.Bloodsown > 3) _harvestWaitUsed = false;
         if (s.TargetId != _previous.TargetId || s.EnshroudQt != _previous.EnshroudQt || s.CircleQt != _previous.CircleQt
+            || s.HarvestQt != _previous.HarvestQt
             || s.WindowVersion != _previous.WindowVersion) StopHarvestWait("实况变化");
         if (!CanWaitForHarvest || _harvestUntil > 0 && s.Now >= _harvestUntil) StopHarvestWait("等待结束");
         DeferHarvestQueue = CanWaitForHarvest && (_harvestUntil > 0 || !_harvestWaitUsed && s.Bloodsown > 0);

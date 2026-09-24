@@ -29,7 +29,7 @@ internal static class Samurai100Planning
         get
         {
             if (Core.Me == null || !Samurai100Helper.Enabled || !GameData.IsInCombat()) return "当前使用基础循环";
-            var s = ReadState();
+            var s = ReadBudgetState();
             return $"{Samurai100Rules.Phase(s)} 兑现余量={Samurai100Rules.SelfWindow(s):F1}秒 " +
                    $"剑气预留={Samurai100Rules.Reserve(s)} 下刀产气={Samurai100Rules.NextGain(s)} " +
                    $"药={s.Potion:F1} 团辅={s.Party:F1}；{_plan?.Summary ?? "基础循环自然兑现"}";
@@ -97,16 +97,20 @@ internal static class Samurai100Planning
         if (Core.Target == null || Core.Target.IsDead || !Core.Target.IsTargetable || s.Target == s.Player || s.Casting)
         { _plan = null; return; }
         var preparing = Samurai100Rules.Preparing(s);
+        // 提前一个明镜充能周期看下一次120，不保存轮次。
+        var nextBurst = s.UseIki && s.IkiCd <= 55 && s.Ogi <= 0 && !s.OgiReturn && s.Zanshin <= 0;
         var window = Samurai100Rules.Spending(s) ? Samurai100Rules.SelfWindow(s) : 0;
         if (preparing) window = Math.Max(window, s.IkiCd + 30);
+        if (nextBurst) window = Math.Max(window, s.IkiCd + 30);
         if (s.BattleTime >= 0 && s.BattleTime < 25) window = Math.Min(window, 25 - s.BattleTime);
         if (s.Potion > 0) window = s.Potion;
         else if (s.Party > 0) window = Math.Max(window, s.Party);
-        if (!_pending && window <= 0) { _plan = null; return; }
+        // 平稳期也看续花和下一次明镜，避免到爆发才临时拼资源。
+        if (!_pending && window <= 0) window = Math.Clamp(s.Dot + 5, 20, 40);
         if (now - _readAt < 80 && SameResources(s, _state)) return;
         _readAt = now;
         s.ReturnIsOld = s.ReturnLeft > 0;
-        s.WindowStart = s.Potion > 0 || _pending || !preparing ? 0 : Math.Max(0, s.IkiCd - s.Gcd);
+        s.WindowStart = s.Potion > 0 || _pending || !preparing && !nextBurst ? 0 : Math.Max(0, s.IkiCd - s.Gcd);
         if (_pending)
         {
             var item = GameData.GetBestPotionId();
@@ -114,7 +118,7 @@ internal static class Samurai100Planning
         }
         _state = s;
         var wait = _pending ? Math.Max(0, (_deadline - now) / 1000f) : -1;
-        _plan = Samurai100Projection.Find(s, Math.Min(40, window), wait);
+        _plan = Samurai100Projection.Find(s, Math.Min(85, window), wait);
     }
 
     private static void FinishPotion(string reason)
@@ -168,8 +172,8 @@ internal static class Samurai100Planning
             $"当前优先{SamuraiDebugLog.ActionName(_plan.OffGcd)}；{Samurai100Rules.Phase(_state)}";
         if (action == SAMSkill.必杀剑_震天)
         {
-            var spend = Samurai100Rules.SpendKenki(_state, out var kenkiReason);
-            if (use || !spend) reason = kenkiReason;
+            var spend = Samurai100Rules.SpendKenki(ReadBudgetState(), out var kenkiReason);
+            if (use && spend || !use && !spend) reason = kenkiReason;
         }
         return true;
     }
@@ -261,6 +265,17 @@ internal static class Samurai100Planning
         ActionUpdater.UseAction(new PAction(item, ActionType.Item, ActionTargetType.Self));
         _plan = null; _readAt = 0;
         return true;
+    }
+
+    internal static Samurai100State ReadBudgetState()
+    {
+        var s = ReadState();
+        if (!ValidPlan() || _plan!.CurrentOnly) return s;
+        // 诊断也使用当前候选，避免日志预算和实际选择相反。
+        s.Projecting = true; s.Order = _plan.Order; s.MirrorsLeft = _plan.Order / 4;
+        s.MirrorTiming = _plan.MirrorTiming;
+        s.FlowerDelay = _plan.FlowerDelay;
+        return s;
     }
 
     internal static Samurai100State ReadState()

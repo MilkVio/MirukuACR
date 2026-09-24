@@ -1,51 +1,33 @@
+using MilkVio.DPS.Machinist.Planning;
 using PromeRotation.Data;
 using PromeRotation.Rotation;
 
-namespace MilkVio.DPS.Machinist
+namespace MilkVio.DPS.Machinist;
+
+public class MachinistRotationEventHandler : IRotationEventHandler
 {
-    public class MachinistRotationEventHandler : IRotationEventHandler
+    private readonly MachinistRotation _rotation;
+    public MachinistRotationEventHandler(MachinistRotation rotation) => _rotation = rotation;
+    public void OnUpdate()
     {
-        // 每帧都会执行一次下面的方法
-        public void OnUpdate()
-        {
-            MachinistHelper.UpdateWeaveLimit();
-        }
-
-        // 非战斗状态下每帧都会执行一次下面的方法
-        public void OnOutOfBattleUpdate()
-        {
-            
-        }
-
-        // 交战状态变为True的时候会执行一次下面的代码
-        public void OnBattleStarted()
-        {
-            
-        }
-        
-        // 这里战斗中每帧都会执行一次下面的方法
-        public void OnBattleUpdate()
-        {
-            
-        }
-        
-        
-        // 战斗中没有可攻击目标时每帧都会执行一次下面的方法
-        public void OnNoTarget()
-        {
-        }
-
-        // 交战状态变为False的时候会执行一次下面的代码
-        public void OnBattleEnded()
-        {
-            MachinistHelper.ResetWeaveLimit();
-            PromeSettings.Instance.OpenerHasBeenExecuted = false;
-        }
-
-        // 切换区域会执行一次下面的方法
-        public void OnTerritoryChanged(ushort territoryId)
-        {
-            MachinistHelper.ResetWeaveLimit();
-        }
+        MachinistHelper.UpdateWeaveLimit();
+        _rotation.UpdatePlanning();
+    }
+    public void OnOutOfBattleUpdate() { }
+    public void OnBattleStarted() => _rotation.DebugLog.CombatStarted(Environment.TickCount64);
+    public void OnBattleUpdate() { }
+    public void OnNoTarget() { }
+    public void OnBattleEnded()
+    {
+        MachinistHelper.ResetWeaveLimit();
+        MachinistPlanning.Reset("战斗结束", true);
+        _rotation.DebugLog.CombatEnded(Environment.TickCount64, "战斗结束");
+        PromeSettings.Instance.OpenerHasBeenExecuted = false;
+    }
+    public void OnTerritoryChanged(ushort territoryId)
+    {
+        MachinistHelper.ResetWeaveLimit();
+        MachinistPlanning.Reset("切换区域", true);
+        _rotation.DebugLog.CombatEnded(Environment.TickCount64, $"切换区域{territoryId}");
     }
 }

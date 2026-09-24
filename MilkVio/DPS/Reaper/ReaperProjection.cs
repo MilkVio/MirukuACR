@@ -181,6 +181,7 @@ public sealed class ReaperProjection
         && a.Soul == b.Soul && a.Shroud == b.Shroud && a.Lemure == b.Lemure && a.Void == b.Void && a.Reavers == b.Reavers && a.Executioner == b.Executioner
         && a.LastGcd == b.LastGcd && a.ComboNext == b.ComboNext && a.Moving == b.Moving && a.Melee == b.Melee
         && a.CircleQt == b.CircleQt && a.EnshroudQt == b.EnshroudQt && a.GluttonyQt == b.GluttonyQt && a.BloodQt == b.BloodQt
+        && a.HarvestQt == b.HarvestQt
         && a.FastCircle == b.FastCircle
         && a.SliceQt == b.SliceQt && a.DotQt == b.DotQt && a.HarvestMoonQt == b.HarvestMoonQt && a.HarpeQt == b.HarpeQt
         && a.DumpQt == b.DumpQt && a.FarPerfectioQt == b.FarPerfectioQt && a.Soulsow == b.Soulsow

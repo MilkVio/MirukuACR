@@ -58,6 +58,7 @@ public readonly record struct ReaperState
     public float ReapingBuff { get; init; }
     public bool Soulsow { get; init; }
     public bool CircleQt { get; init; }
+    public bool HarvestQt { get; init; }
     public bool FastCircle { get; init; }
     public bool EnshroudQt { get; init; }
     public bool GluttonyQt { get; init; }
@@ -81,7 +82,7 @@ public readonly record struct ReaperState
     public bool CanEnshroud => Level >= 80 && EnshroudQt && !Locked && Perfectio <= 0
         && (!WindowActive || (WindowLeft > 0 ? WindowLeft : WindowLimit) > 0.8f)
         && EnshroudCd <= 0 && (Shroud >= 50 || FreeEnshroud > 0);
-    public bool CanHarvest => Level >= 88 && CircleQt && !Locked && Bloodsown <= 0 && SacrificeStacks > 0
+    public bool CanHarvest => Level >= 88 && CircleQt && HarvestQt && !Locked && Bloodsown <= 0 && SacrificeStacks > 0
         && FreeEnshroud <= 0 && Perfectio <= 0 && Distance <= GameData.GetCurrentAttackRange(15);
     public float ShroudFinishIn => GcdLeft + Math.Max(0, Lemure - 1) * ReapGcd + CommunioCast + 0.65f;
     public bool CanHarvestMoonForRange => Alive && HasTarget && HasTiming && Level >= 90 && !CastingCommunio && Lemure > 0
@@ -140,6 +141,7 @@ public readonly record struct ReaperState
             Occulta = me.GetStatusLeftTime(ReaperBuff.补完Buff), Perfectio = me.GetStatusLeftTime(ReaperBuff.完人预备Buff),
             Oblatio = me.GetStatusLeftTime(ReaperBuff.祭牲预备Buff), Soulsow = me.HasStatus(ReaperBuff.播魂种Buff),
             CircleQt = settings.GetQt(ReaperQt.神秘环), EnshroudQt = settings.GetQt(ReaperQt.附体),
+            HarvestQt = settings.GetQt(ReaperQt.大丰收),
             FastCircle = ReaperBattleData.Instance.FastCircle,
             GluttonyQt = settings.GetQt(ReaperQt.暴食), BloodQt = settings.GetQt(ReaperQt.隐匿挥割),
             SliceQt = settings.GetQt(ReaperQt.灵魂割), DotQt = settings.GetQt(ReaperQt.Dot),

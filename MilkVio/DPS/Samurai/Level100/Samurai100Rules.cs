@@ -27,7 +27,7 @@ internal static class Samurai100Rules
 
     public static bool ReturnBeforeFlower(Samurai100State s)
     {
-        return !s.UseDot || s.Dot > s.GcdLeft + (Samurai100Projection.ToFlower(s) + 1) * s.Gcd +
+        return !s.UseDot || s.Dot + s.FlowerDelay > s.GcdLeft + (Samurai100Projection.ToFlower(s) + 1) * s.Gcd +
             s.Cast + Samurai100Helper.EffectMargin;
     }
 
@@ -71,7 +71,10 @@ internal static class Samurai100Rules
         { reason = "先用照破，防止剑压溢出"; return false; }
         if (!s.UseShinten) { reason = "震天关闭，意气好了就用"; return true; }
         if (s.Kenki > 50) { reason = "先腾出50剑气空间"; return false; }
-        if (s.Kenki >= 25 && s.Distance <= s.MeleeRange && s.Kenki + NextGain(s) + (s.Eye > 0 ? 10 : 0) > 50)
+        var canSpendAfter = s.MaxWeaves > 1 && s.GcdLeft >= 2 * Samurai100Projection.AbilityLock &&
+            (s.UseZanshin && s.ZanshinCd <= Samurai100Projection.AbilityLock ||
+             s.UseSenei && s.SeneiCd <= Samurai100Projection.AbilityLock && s.Moon > 0 && s.Distance <= s.MeleeRange);
+        if (!canSpendAfter && s.Kenki >= 25 && s.Distance <= s.MeleeRange && s.Kenki + NextGain(s) + (s.Eye > 0 ? 10 : 0) > 50)
         { reason = "先泄剑气，给下一刀留空间"; return false; }
         return true;
     }
@@ -122,7 +125,7 @@ internal static class Samurai100Rules
 
     public static int BeforeIkiLimit(Samurai100State s)
     {
-        var income = Samurai100Projection.IncomeBefore(s, Math.Max(s.GcdLeft, s.IkiCd) + Samurai100Helper.EffectMargin);
+        var income = Samurai100Projection.IncomeBefore(s, Math.Max(s.GcdLeft, s.IkiCd) + Samurai100Helper.EffectMargin, false);
         if (s.UseSenei && s.SeneiCd <= s.IkiCd && s.Moon > s.SeneiCd &&
             s.Distance <= s.MeleeRange && s.Kenki + income >= 25) income = Math.Max(0, income - 25);
         return 50 - income - (s.Eye > 0 ? 10 : 0);

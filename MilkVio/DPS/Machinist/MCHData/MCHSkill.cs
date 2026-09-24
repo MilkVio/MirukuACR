@@ -17,6 +17,7 @@ public class MCHSkill
     public const uint 钻头 = 16498;
     //群体GCD
     public const uint 散射 = 2870;
+    public const uint 霰弹枪 = 25786;
     public const uint 毒菌冲击 = 16499;
     public const uint 火焰喷射器 = 7418;
     //特殊GCD

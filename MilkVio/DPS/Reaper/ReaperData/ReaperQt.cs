@@ -5,6 +5,7 @@ public static class ReaperQt
     public const string 启用起手 = "启用起手";
     public const string 远离完人 = "远离完人";
     public const string 神秘环 = "120";
+    public const string 大丰收 = "大丰收";
     public const string 附体 = "附体";
     public const string 暴食 = "暴食";
     public const string 隐匿挥割 = "隐匿挥割";

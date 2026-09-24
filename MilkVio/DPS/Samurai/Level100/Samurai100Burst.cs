@@ -95,7 +95,7 @@ public static class Samurai100Burst
 
     public static int NextKenkiGain()
     {
-        return Samurai100Rules.NextGain(Samurai100Planning.ReadState());
+        return Samurai100Rules.NextGain(Samurai100Planning.ReadBudgetState());
     }
 
     public static bool ShouldUseIkishoten(out string reason)
@@ -112,7 +112,7 @@ public static class Samurai100Burst
 
     public static int ReservedKenki()
     {
-        return Samurai100Rules.Reserve(Samurai100Planning.ReadState());
+        return Samurai100Rules.Reserve(Samurai100Planning.ReadBudgetState());
     }
 
     public static bool NeedSpaceWithOneWeave()

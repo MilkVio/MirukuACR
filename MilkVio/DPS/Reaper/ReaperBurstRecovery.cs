@@ -13,7 +13,7 @@ internal static class ReaperBurstRecovery
     internal static bool IsActive(ReaperState s) => !s.IsDump && s.HasTiming && s.Level >= 100
         && (s.CircleLeft > 0 || s.CircleQt && s.CircleCd <= s.PreparationLead);
 
-    internal static bool PendingHarvest(ReaperState s) => s.CircleQt && s.SacrificeStacks > 0
+    internal static bool PendingHarvest(ReaperState s) => s.CircleQt && s.HarvestQt && s.SacrificeStacks > 0
         && s.SacrificeLeft > s.Bloodsown + 0.15f && s.FreeEnshroud <= 0 && s.Perfectio <= 0 && s.Occulta <= 0;
 
     internal static float HarvestAt(ReaperState s) => s.Bloodsown <= s.GcdLeft + HarvestMaxExtraWaitSeconds

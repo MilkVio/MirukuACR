@@ -58,6 +58,7 @@ public class WarriorRotation : IRotation
         {"战士绝亚DollSkip_MT起手", typeof(WAR_80_TEADS_MT)},
         {"战士绝欧MT起手", typeof(WAR_90_TOP_MT)},
         {"战士绝伊甸MT专用起手2", typeof(WAR_100_FRU_MT_FA)},
+        {"战士绝妖星MT起手", typeof(WAR_100_DMU_MT)},
     };
     
     

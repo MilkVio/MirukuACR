@@ -7,6 +7,7 @@ public static class ReaperResources
 {
     private const float WeaveTime = 0.65f;
     private const float DeathDesignSafety = 0.25f;
+    private const float CircleDuration = 20;
 
     public static bool AllowsPerfectio(ReaperState s) => s.Alive && s.HasTarget && s.Perfectio > 0
         && !s.Locked && s.Distance <= GameData.GetCurrentAttackRange(25)
@@ -40,7 +41,7 @@ public static class ReaperResources
         if (!s.WindowActive || !s.HasTiming || s.CircleLeft <= 0 && HasWindowCircle(s)) return false;
         // 已有资源及少量回资源技能需要的时间，不固定为最后20秒。
         var shrouds = s.EnshroudQt ? Math.Max(0, s.Shroud - s.GoalShroud) / 50 : 0;
-        var free = s.EnshroudQt && (s.FreeEnshroud > 0 || s.CircleQt && s.SacrificeStacks > 0) ? 1 : 0;
+        var free = s.EnshroudQt && (s.FreeEnshroud > 0 || s.CircleQt && s.HarvestQt && s.SacrificeStacks > 0) ? 1 : 0;
         var reds = s.BloodQt || s.GluttonyQt ? Math.Max(0, s.Soul - s.GoalSoul) / 50 : 0;
         if (s.SliceQt && s.SliceCharges >= 1 && (s.BloodQt || s.GluttonyQt)) reds++;
         var duration = (shrouds + free) * (4 * s.ReapGcd + s.CommunioGcd)
@@ -170,7 +171,7 @@ public static class ReaperResources
                 || soul >= 50 && NeedsGluttonyPreparation(s, dot, time, weave)))
                 dot = Math.Min(time + 60, Math.Max(dot, time) + 30);
             else if (usePerfectio) perfectioUsed = true;
-            else if (!harvestUsed && s.CircleQt && s.SacrificeStacks > 0 && s.Bloodsown <= time && s.SacrificeLeft > time
+            else if (!harvestUsed && s.CircleQt && s.HarvestQt && s.SacrificeStacks > 0 && s.Bloodsown <= time && s.SacrificeLeft > time
                 && s.FreeEnshroud <= 0 && s.Perfectio <= 0) harvestUsed = true;
             else if (s.SliceQt && charges >= 1 && soul <= 50) { charges--; gain = 50; }
             else gain = 10;
@@ -209,7 +210,7 @@ public static class ReaperResources
     internal static bool CanSkipFirstDesign(ReaperState s, float firstReapAt, out float circleAt, float? earliestCircleAt = null)
     {
         circleAt = float.PositiveInfinity;
-        if (!s.HasTiming || !s.CircleQt || !s.EnshroudQt || !float.IsFinite(firstReapAt)
+        if (!s.HasTiming || !s.CircleQt || !s.HarvestQt || !s.EnshroudQt || !float.IsFinite(firstReapAt)
             || !float.IsFinite(s.CircleCd) || s.CircleCd < 0) return false;
         circleAt = Math.Max(0, Math.Max(s.CircleCd, firstReapAt + WeaveTime));
         var harvestAt = firstReapAt + 4 * s.ReapGcd + s.CommunioGcd;
@@ -221,19 +222,36 @@ public static class ReaperResources
             var early = Math.Max(s.CircleCd, Math.Max(0, earliestCircleAt.Value));
             var fitsBefore = early + WeaveTime + 0.05f <= firstReapAt;
             var fitsAfter = early >= firstReapAt && early + WeaveTime + 0.05f <= firstReapAt + s.ReapGcd;
-            if ((fitsBefore || fitsAfter) && communioAt + 0.15f < early + 20 && harvestAt >= early + 6.7f)
+            if ((fitsBefore || fitsAfter) && communioAt + 0.15f < early + CircleDuration && harvestAt >= early + 6.7f)
                 circleAt = early;
         }
         if (circleAt + WeaveTime + 0.05f > firstReapAt + s.ReapGcd) return false;
         if (harvestAt < circleAt + 6.7f) return false;
-        if (communioAt + 0.15f >= circleAt + 20
+        if (communioAt + 0.15f >= circleAt + CircleDuration
             || s.WindowActive && communioAt + 0.15f >= s.WindowLeft) return false;
 
-        var perfectioAt = secondStart + 4 * s.ReapGcd + s.CommunioGcd;
+        return s.DeathDesign > FirstDesignUntil(s, firstReapAt, circleAt) + DeathDesignSafety;
+    }
+
+    private static float FirstDesignUntil(ReaperState s, float firstReapAt, float circleAt)
+    {
+        var harvestAt = firstReapAt + 4 * s.ReapGcd + s.CommunioGcd;
+        var perfectioAt = harvestAt + s.Gcd + 4 * s.ReapGcd + s.CommunioGcd;
         var designAt = perfectioAt + s.PerfectioGcd;
         if (s.ComboNext != 0 && s.ComboLeft > designAt) designAt += s.Gcd;
-        // 烙印要撑到收尾能续印的位置，完人是否进团辅仍只作尽力目标。
-        return s.DeathDesign > designAt + DeathDesignSafety;
+        // 覆盖到收尾可续印的位置；快速环还要覆盖完整20秒，计入效果生效的余量。
+        return s.FastCircle ? Math.Max(designAt, circleAt + CircleDuration + WeaveTime) : designAt;
+    }
+
+    internal static bool NeedsFastCircleDesign(ReaperState s, int prepGcds)
+    {
+        if (!s.FastCircle || !s.DotQt || !s.HasTiming) return false;
+        var firstReapAt = s.GcdLeft + Math.Max(0, 2 - prepGcds) * s.Gcd;
+        var enshroudAt = Math.Max(s.EnshroudCd, Math.Max(0, firstReapAt - s.Gcd + WeaveTime));
+        // 时序本来就需要附体内填充时，留给原有安排，避免提前补印后又补一次。
+        if (!CanSkipFirstDesign(s with { DeathDesign = float.PositiveInfinity }, firstReapAt, out var circleAt,
+            earliestCircleAt: enshroudAt + WeaveTime)) return false;
+        return s.DeathDesign <= FirstDesignUntil(s, firstReapAt, circleAt) + DeathDesignSafety;
     }
 
     public static int ForecastShroud(ReaperState s, bool enshroudNow) => ForecastPreparation(s, enshroudNow).Shroud;
@@ -255,11 +273,24 @@ public static class ReaperResources
             : s.Perfectio > 0 ? s.PerfectioGcd : 0;
         var time = s.GcdLeft + occupied;
         var circleAt = float.PositiveInfinity;
-        for (var i = 0; i < 96 && time + 2 * s.Gcd + WeaveTime <= horizon; i++, time += s.Gcd)
+        var preparation = s.HarvestQt ? 2 * s.Gcd : 0;
+        var earliestCircle = s.FastCircle && s.HarvestQt ? s.Gcd + 2 * WeaveTime : preparation + WeaveTime;
+        for (var i = 0; i < 96 && time + earliestCircle <= horizon; i++, time += s.Gcd)
         {
-            if (time + 2 * s.Gcd + s.ReapGcd + circleDelay > horizon && (green < 50 || pending > 0)) break;
+            if (time + preparation + s.ReapGcd + circleDelay > horizon && (green < 50 || pending > 0)) break;
             if (green >= 50 && pending == 0)
             {
+                if (!s.HarvestQt)
+                {
+                    // 没有大丰收时只预留一套附体，不计算免费附体或双附体填充。
+                    circleAt = Math.Max(s.CircleCd, time + WeaveTime);
+                    var enshroudAt = Math.Max(s.EnshroudCd, circleAt + WeaveTime);
+                    var firstReapAt = time + MathF.Ceiling((enshroudAt + WeaveTime - time) / s.Gcd) * s.Gcd;
+                    var singleFinish = firstReapAt + 4 * s.ReapGcd + s.CommunioCast;
+                    var singleFits = circleAt <= horizon && singleFinish + 0.15f < circleAt + 20
+                        && (!s.WindowActive || singleFinish + 0.15f < s.WindowLeft);
+                    return new(singleFits, circleAt, green, singleFits ? "单附体120准备可达" : "单附体无法覆盖剩余窗口");
+                }
                 var prepareAt = time;
                 // 窗口截止检查还要容纳神秘环错过插入位置后，增加的准备GCD。
                 if (s.WindowActive)
@@ -270,10 +301,11 @@ public static class ReaperResources
                 circleAt = Math.Max(s.CircleCd, prepareAt + 2 * s.Gcd + s.ReapGcd + circleDelay);
                 var finishAt = prepareAt + 4 * s.Gcd + 8 * s.ReapGcd + s.CommunioGcd + s.CommunioCast;
                 var designUntil = dot;
-                if (s.DotQt && dot < prepareAt + 10)
+                if (s.DotQt && (dot < prepareAt + 10
+                    || NeedsFastCircleDesign(s with { GcdLeft = prepareAt, DeathDesign = dot }, 0)))
                     designUntil = Math.Min(prepareAt + 60, Math.Max(dot, prepareAt) + 30);
                 if (CanSkipFirstDesign(s with { DeathDesign = designUntil }, prepareAt + 2 * s.Gcd, out var earlyCircle,
-                    earliestCircleAt: ReaperLevelRules.UsesLevel90(s.Level) && s.FastCircle ? prepareAt + s.Gcd + 2 * WeaveTime : null))
+                    earliestCircleAt: s.FastCircle ? Math.Max(s.EnshroudCd, prepareAt + s.Gcd + WeaveTime) + WeaveTime : null))
                 {
                     circleAt = earlyCircle;
                     finishAt -= s.Gcd;

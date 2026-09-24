@@ -147,7 +147,8 @@ public sealed partial class ReaperBurstPlanner
             || s.GoalSoul > 0 || s.GoalShroud > 0 || old.GoalSoul > 0 || old.GoalShroud > 0);
         if (s.Now >= _recoveryUntil || !s.HasTarget || s.TargetId != old.TargetId
             || s.CircleLeft <= 0 || s.SacrificeStacks == 0 || changedCoverage
-            || s.EnshroudQt != old.EnshroudQt || s.CircleQt != old.CircleQt || s.BloodQt != old.BloodQt || s.GluttonyQt != old.GluttonyQt
+            || s.EnshroudQt != old.EnshroudQt || s.CircleQt != old.CircleQt || s.HarvestQt != old.HarvestQt
+            || s.BloodQt != old.BloodQt || s.GluttonyQt != old.GluttonyQt
             || s.SliceQt != old.SliceQt || s.DotQt != old.DotQt || s.HarvestMoonQt != old.HarvestMoonQt
             || s.GoalSoul != old.GoalSoul || s.GoalShroud != old.GoalShroud || !ReaperBurstRecovery.PendingHarvest(s)
             || Math.Abs(s.Gcd - old.Gcd) > .001f || Math.Abs(s.CommunioCast - old.CommunioCast) > .001f
@@ -186,7 +187,7 @@ public sealed partial class ReaperBurstPlanner
 
     // 只用于固定步骤内部的可用性计算，不修改实况或真实QT。
     private static ReaperState OpenerState(ReaperState s) => s with
-        { CircleQt = true, EnshroudQt = true, HarvestMoonQt = false, DumpQt = false, WindowActive = false };
+        { CircleQt = true, HarvestQt = true, EnshroudQt = true, HarvestMoonQt = false, DumpQt = false, WindowActive = false };
 
     internal void NoteOpenerBlocked(uint id, uint? nativeStatus)
     {
@@ -264,6 +265,13 @@ public sealed partial class ReaperBurstPlanner
             ObserveAction(s.LastGcd);
         // 固定序列独占出招；QT、倾泻和窗口只保留最新实况，结束后再参与普通决策。
         if (UpdateOpener(s)) return;
+        if (_previous.Alive && s.HarvestQt != _previous.HarvestQt)
+        {
+            StopHarvestWait("大丰收QT变化");
+            _projection.Clear(); _dump.Clear();
+            RecoveryRoute = ReaperBurstRoute.当前安排; _recoveryUntil = 0;
+            _retryAt = _simpleUntil = 0;
+        }
         if (s.IsDump != _previous.IsDump)
         {
             Replan("倾泻模式变化，按当前资源重算");
@@ -307,6 +315,8 @@ public sealed partial class ReaperBurstPlanner
             Replan("时序或QT变化，按当前权限重算");
 
         Reconcile(s);
+        if (IsPlanned && !s.HarvestQt && !_harvestUsed)
+            Replan("大丰收关闭，按当前权限继续");
         if (Phase == ReaperBurstPhase.大丰收衔接 && !s.CircleQt && !_harvestUsed)
             Replan("120关闭，跳过大丰收衔接");
         if (IsPlanned && _previous.CircleLeft > 0 && s.CircleLeft <= 0
@@ -324,7 +334,7 @@ public sealed partial class ReaperBurstPlanner
             && !s.Locked && s.FreeEnshroud <= 0)
             ForecastGreen = ReaperResources.ForecastShroud(s, true);
         if (Phase == ReaperBurstPhase.非爆发期 && s.Now >= _retryAt && !IsCoordinating && !IsSimple
-            && s.Level >= 100 && s.HasTiming && s.Melee && s.CircleQt && s.EnshroudQt && s.DotQt
+            && s.Level >= 100 && s.HasTiming && s.Melee && s.CircleQt && s.HarvestQt && s.EnshroudQt && s.DotQt
             && s.CircleLeft <= 0 && s.CircleCd > 0 && s.CircleCd <= s.PreparationLead
             && s.Shroud >= 50 && s.FreeEnshroud <= 0 && s.Perfectio <= 0 && s.Occulta <= 0 && !s.Locked
             && (!s.WindowActive || s.WindowLeft > s.CircleCd + 20 || ReaperResources.ForecastPreparation(s, false).Ready))
@@ -422,6 +432,7 @@ public sealed partial class ReaperBurstPlanner
         if (_previous.InCombat && _previous.CircleCd <= 1 && s.CircleCd > 60 && s.Bloodsown > 3)
         { StopHarvestWait("新一轮神秘环"); _harvestWaitUsed = false; }
         if (s.TargetId != _previous.TargetId || !IsOpener && (s.EnshroudQt != _previous.EnshroudQt || s.CircleQt != _previous.CircleQt
+            || s.HarvestQt != _previous.HarvestQt
             || s.DotQt != _previous.DotQt || s.GluttonyQt != _previous.GluttonyQt || s.BloodQt != _previous.BloodQt
             || s.SliceQt != _previous.SliceQt || s.HarvestMoonQt != _previous.HarvestMoonQt
             || s.WindowVersion != _previous.WindowVersion || s.WindowActive != _previous.WindowActive))
@@ -638,18 +649,21 @@ public sealed partial class ReaperBurstPlanner
         {
             if (s.CircleCd <= 0) { Cancel("准备未完成，神秘环优先转简单爆发"); return; }
             if (!s.Melee || s.Shroud < 50) { Cancel("双附体准备条件丢失"); return; }
-            if (s.DeathDesign < 10) GcdAction = ReaperSkill.死亡之影;
+            var prepareDesign = ReaperResources.NeedsFastCircleDesign(s, _prepGcds);
+            if (prepareDesign && s.ComboAtRisk(s.Gcd)) GcdAction = s.ComboNext;
+            else if (s.DeathDesign < 10 || prepareDesign) GcdAction = ReaperSkill.死亡之影;
             else if (s.ComboAtRisk(s.DoubleDuration)) GcdAction = s.ComboNext;
             else if (s.SliceQt && s.SliceCharges >= 1 && s.Soul <= 50) GcdAction = ReaperSkill.灵魂切割;
             else GcdAction = Combo(s);
             var lastCircleWeave = s.GcdLeft + s.ReapGcd + s.Gcd - 0.65f;
-            if (_prepGcds >= 2 && s.CanEnshroud && s.DeathDesign >= 10 && !s.ComboAtRisk(s.DoubleDuration)
+            if (_prepGcds >= 2 && s.CanEnshroud && s.DeathDesign >= 10 && !prepareDesign && !s.ComboAtRisk(s.DoubleDuration)
                 && s.CircleCd <= lastCircleWeave) OffGcdAction = ReaperSkill.夜游魂衣;
             return;
         }
         if (Phase is ReaperBurstPhase.第一附体 or ReaperBurstPhase.第二附体)
         {
             if (s.Enshrouded <= 0) return; // 能力技生效后的短暂量谱同步，由阶段超时统一兜底。
+            var circleAt = float.PositiveInfinity;
             if (Phase == ReaperBurstPhase.第一附体 && !_firstDot)
             {
                 // 开环成功前按实况重算；成功后不再因为这个插入位置已过而补回填充。
@@ -659,16 +673,24 @@ public sealed partial class ReaperBurstPlanner
                     if (s.Lemure == 5) firstReapAt = s.GcdLeft;
                     else if (s.Lemure == 4 && Math.Abs(s.GcdLeft + s.GcdElapsed - s.ReapGcd) < 0.1f)
                         firstReapAt = -s.GcdElapsed;
-                    _skipFirstDot = ReaperResources.CanSkipFirstDesign(s, firstReapAt, out _);
+                    _skipFirstDot = ReaperResources.CanSkipFirstDesign(s, firstReapAt, out circleAt,
+                        earliestCircleAt: s.FastCircle ? 0 : null);
                 }
+                if (s.FastCircle && !_skipFirstDot && s.Lemure is > 0 and < 4
+                    && s.CircleCd <= 0 && s.CircleLeft <= 0 && s.Now >= _shroudSyncUntil)
+                { Replan("快速神秘环：原插入位置已过，按实况开环"); return; }
                 if (!s.DotQt && !_skipFirstDot) { Replan("烙印填充关闭，按当前权限重算"); return; }
-                if (_skipFirstDot) Reason = "烙印充足，首轮收割后直接开环";
+                if (_skipFirstDot) Reason = s.FastCircle ? "烙印充足，优先快速神秘环" : "烙印充足，首轮收割后直接开环";
             }
             if (Phase == ReaperBurstPhase.第一附体 && !_firstDot && !_skipFirstDot && s.Lemure == 4)
                 GcdAction = ReaperSkill.死亡之影;
             else GcdAction = ShroudGcd(s);
             var circleWeave = _firstDot ? s.FastCircle || s.GcdElapsed >= s.Gcd / 2 || s.LastGcd != ReaperSkill.死亡之影
-                : _skipFirstDot && s.Lemure == 4 && s.GcdElapsed >= 0.65f && s.GcdLeft > 0.65f;
+                : _skipFirstDot && (s.FastCircle ? circleAt <= 0 && s.GcdLeft > 0.65f
+                    : s.Lemure == 4 && s.GcdElapsed >= 0.65f && s.GcdLeft > 0.65f);
+            if (Phase == ReaperBurstPhase.第一附体 && s.FastCircle && _skipFirstDot
+                && s.CircleCd <= 0 && s.CircleLeft <= 0 && !circleWeave)
+                Reason = "快速神秘环：等待可覆盖双团契的插入位置";
             if (Phase == ReaperBurstPhase.第一附体 && circleWeave && s.CircleQt && s.CircleLeft <= 0 && s.CircleCd <= 0)
                 OffGcdAction = ReaperSkill.神秘环;
             else OffGcdAction = ShroudOffGcd(s, Phase == ReaperBurstPhase.第一附体 && (s.CircleLeft <= 0 || s.Lemure > 2));

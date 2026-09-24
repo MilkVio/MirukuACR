@@ -246,10 +246,10 @@ public static class Samurai100Helper
         if (Core.Me.HasStatus(SAMBuff.天道)) { reason = "先兑换已有天道"; return false; }
         if (GetComboId() != 0) { reason = "先续完连击"; return false; }
         if (Core.Me.DistanceToMe() > GameData.GetCurrentMeleeRange()) return false;
+        if (Samurai100Planning.TryOff(SAMSkill.明镜止水, out var planned, out reason)) return planned;
         if (KeepOneSenForHiganbana()) { reason = "先用已有一闪续花"; return false; }
         if (!Samurai100Projection.CanMirror(Samurai100Planning.ReadState()))
         { reason = "三层明镜无法用月花正常衔接，先调整资源"; return false; }
-        if (Samurai100Planning.TryOff(SAMSkill.明镜止水, out var planned, out reason)) return planned;
 
         var count = JobGaugeHelper.SAM.GetSenCount();
         var needBuff = Core.Me.GetStatusLeftTime(SAMBuff.风月) <= HiganbanaTimeAfter(1) ||

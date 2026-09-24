@@ -16,8 +16,8 @@ public class 基础Gcd : IDecisionResolver
         var me = Core.Me;
         if (me.DistanceToMe() > currentAttackRange) return new CheckResult(false, $"当前目标过远（>{currentAttackRange}m）");
 
-        if (me.HasStatus(MCHStatus.过热) || me.HasStatus(MCHStatus.整备))
-            return new CheckResult(false, $"当前有过热和整备");
+        if (me.HasStatus(MCHStatus.过热))
+            return new CheckResult(false, "当前有过热");
         
         return new CheckResult(true, "当前不满足任何条件");
     }

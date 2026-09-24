@@ -84,12 +84,12 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         _offGcdResolvers.Add(new 残心OffGcd());
         _offGcdResolvers.Add(new 意气冲天OffGcd());
         _offGcdResolvers.Add(new 照破OffGcd());
-        _offGcdResolvers.Add(new 真北OffGcd(() => ResolveNextGcd(false)));
         _offGcdResolvers.Add(new 必杀剑_红莲OffGcd());
         _offGcdResolvers.Add(new 必杀剑_闪影OffGcd());
         _offGcdResolvers.Add(new 明镜止水OffGcd());
         _offGcdResolvers.Add(new 必杀剑_九天OffGcd());
         _offGcdResolvers.Add(new 必杀剑_震天OffGcd());
+        _offGcdResolvers.Add(new 真北OffGcd(() => ResolveNextGcd(false)));
         
         // 爆发状态下的GCD
         _gcdResolvers.Add(new 奥义斩浪Gcd());
@@ -263,7 +263,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         if (!settings.显示技能预测 && !settings.显示下G横幅)
         { Prediction = default; _predictionHints.Reset(); return; }
         if (!settings.显示下G横幅) _predictionHints.Reset();
-        if (Core.Me == null || Core.Me.IsDead || !GameData.IsInCombat() || !Samurai100Helper.Enabled ||
+        if (Core.Me == null || Core.Me.IsDead || !GameData.IsInCombat() || Core.Me.Level != 100 ||
             Core.Target == null || Core.Target.IsDead || !Core.Target.IsTargetable || Core.Target.EntityId == Core.Me.EntityId)
         { Prediction = default; _predictionHints.Reset(); return; }
         if (PromeSettings.Instance.EnableAcr != AcrState.On)
@@ -284,7 +284,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
             if (!settings.显示下G横幅) return;
             var hint = _predictionHints.Take(Prediction, Samurai100Planning.ReadState(), Samurai100Planning.Now);
             if (hint.Length == 0) return;
-            HintHelper.ShowToast2(hint, 1.5f, HintHelper.HintType.Info);
+            HintHelper.ShowToast2(hint, 1.5f, HintHelper.HintType.Warning);
             DebugLog.ObserveNote(Environment.TickCount64, $"预测横幅：{hint}");
         }
         catch (Exception ex)
@@ -477,8 +477,8 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         _openerSelector.DrawCombo("起手选择", Openers);
         ImGui.Separator();
         ImGui.Checkbox("显示技能预测", ref SAMSettings.Instance.显示技能预测);
-        ImGui.Checkbox("显示下G横幅（1.5秒）", ref SAMSettings.Instance.显示下G横幅);
-        ImGui.TextDisabled("仅百级单体接管后提示，固定起手期间不预测。");
+        ImGui.Checkbox("显示读条警告横幅（技能名 别动，1.5秒）", ref SAMSettings.Instance.显示下G横幅);
+        ImGui.TextDisabled("百级接管后提示；群攻只显示下一刀，固定起手不预测。");
         if (SAMSettings.Instance.显示技能预测)
         {
             ImGui.Checkbox("锁定预测窗口", ref SAMSettings.Instance.锁定预测窗口);

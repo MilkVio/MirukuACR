@@ -1,3 +1,5 @@
+using PromeRotation.Data;
+
 namespace MilkVio.DPS.Reaper.ReaperData;
 
 public class ReaperBattleData
@@ -37,6 +39,7 @@ public class ReaperBattleData
 
     public void Reset(string reason = "战斗或地图已重置")
     {
+        PromeSettings.Instance.SetQt(ReaperQt.大丰收, true);
         SetFastCircle(false);
         AutoSoulsow.Cancel();
         Planner.Reset(reason);
