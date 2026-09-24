@@ -222,6 +222,7 @@ jobs:
               [ordered]@{ job = "DRG"; contentScope = "HighEnd" }
               [ordered]@{ job = "NIN"; contentScope = "HighEnd" }
               [ordered]@{ job = "SAM"; contentScope = "HighEnd" }
+              [ordered]@{ job = "RPR"; contentScope = "HighEnd" }
               [ordered]@{ job = "VPR"; contentScope = "HighEnd" }
 
               # Ranged DPS
