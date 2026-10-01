@@ -60,17 +60,18 @@ internal static class MachinistRules
             return new(MCHSkill.掘地飞轮, "先兑现飞轮，避免飞锯覆盖预备");
         if (s.SawFirst && ToolReady(s, MCHSkill.回转飞锯)) return new(MCHSkill.回转飞锯, "先打飞锯QT");
         if (s.Excavator > 0 && s.Excavator <= s.Gcd + EffectMargin) return new(MCHSkill.掘地飞轮, "飞轮预备将到期");
-        if (s.FullMetal > 0 && s.FullMetal <= s.Gcd + EffectMargin && s.Reassemble <= 0)
+        if (s.FullMetalPending && s.FullMetal <= s.Gcd + EffectMargin && s.Reassemble <= 0)
             return new(MCHSkill.全金属爆发, "全金属预备将到期");
         var anchor = s.Level >= 76 ? MCHSkill.空气锚 : MCHSkill.热弹;
         if (ToolReady(s, anchor)) return new(anchor, "空气锚及电量收入");
-        if (s.Drill >= 2 - s.Gcd / 20 && ToolReady(s, MCHSkill.钻头)) return new(MCHSkill.钻头, "防钻头充能溢出");
+        if (s.Drill >= 2 - s.Gcd / Math.Max(1, s.DrillRecast) - .0001f && ToolReady(s, MCHSkill.钻头))
+            return new(MCHSkill.钻头, "防钻头充能溢出");
         if (ToolReady(s, MCHSkill.回转飞锯)) return new(MCHSkill.回转飞锯, "飞锯及电量收入");
         if (ToolReady(s, MCHSkill.掘地飞轮)) return new(MCHSkill.掘地飞轮, "飞轮及电量收入");
         if (s.Reassemble > 0 && ToolReady(s, MCHSkill.钻头)) return new(MCHSkill.钻头, "整备钻头");
         if (s.HyperchargeQt && s.Heat == 45 && s.FreeHypercharge <= 0 && BurstLeft(s) > HeatCycle + s.Gcd)
             return new(Combo(s), "补5热以衔接第二次超荷");
-        var preferred = s.FullMetal > EffectMargin && s.Reassemble <= 0
+        var preferred = s.FullMetalPending && s.FullMetal > EffectMargin && s.Reassemble <= 0
             ? new MachinistChoice(MCHSkill.全金属爆发, "全金属爆发")
             : ToolReady(s, MCHSkill.钻头) ? MachinistHeatPlanner.PrepareBridge(s)
                 ? new(Combo(s), "团辅前续连击/补热，保留钻头衔接双过热") : new(MCHSkill.钻头, "可用钻头")
@@ -92,14 +93,9 @@ internal static class MachinistRules
 
     public static float BurstLeft(MachinistState s)
     {
-        if (s.PartyCycle.HasValue)
-        {
-            var start = DamageBurstAt(s);
-            return Math.Max(s.DamageWindow, start <= 0 ? start + 20 : 0);
-        }
-        // 实际团辅优先；没有可见团辅时，以启用的120技能建立本轮预期窗口。
-        var own = s.WildfireQt && s.WildfireCd > 100 ? s.WildfireCd - 100 : 0;
-        if (s.BarrelQt && s.BarrelCd > 100) own = Math.Max(own, s.BarrelCd - 100);
+        // 提前开的枪管不能把尚未开始的野火周期算成已经进入爆发。
+        var cd = BurstAt(s);
+        var own = float.IsFinite(cd) && cd > 100 ? cd - 100 : 0;
         return Math.Max(s.DamageWindow, own);
     }
 
@@ -107,21 +103,13 @@ internal static class MachinistRules
     internal static float BurstAt(MachinistState s) => s.WildfireQt ? s.WildfireCd
         : s.BarrelQt ? s.BarrelCd : float.PositiveInfinity;
 
-    internal static float DamageBurstAt(MachinistState s)
-    {
-        if (s.PartyCycle is not { } start || !float.IsFinite(start)) return BurstAt(s);
-        if (start + 20 <= 0) start += (MathF.Floor((-start - 20) / 120) + 1) * 120;
-        return start;
-    }
+    internal static float DamageBurstAt(MachinistState s) => BurstAt(s);
 
     public static (float Start, float End) QueenWindow(MachinistState s)
     {
         if (s.DamageWindow > 0) return (0, s.DamageWindow);
         // 枪管可提前准备；不能因此把尚未到来的120窗口提前结束。
         var cd = DamageBurstAt(s);
-        if (s.PartyCycle.HasValue)
-            return s.WindowActive && cd >= s.WindowLeft ? (0, s.WindowLeft)
-                : (Math.Max(0, cd), s.WindowActive ? Math.Min(cd + 20, s.WindowLeft) : cd + 20);
         if (cd > 100 && float.IsFinite(cd)) return (0, s.WindowActive ? Math.Min(cd - 100, s.WindowLeft) : cd - 100);
         if (s.WindowActive)
         {
@@ -136,7 +124,7 @@ internal static class MachinistRules
         var duration = s.GcdLeft + HeatCycle;
         return s.AnchorCd >= duration - .1f && s.SawCd >= duration - .1f
             && (2 - s.Drill) * s.DrillRecast >= duration - .1f
-            && s.Excavator <= 0 && s.FullMetal <= 0
+            && s.Excavator <= 0 && !s.FullMetalPending
             && (s.ComboNext == 0 || s.ComboLeft > duration + EffectMargin);
     }
 
@@ -146,7 +134,7 @@ internal static class MachinistRules
         if (Slots(s) == 0) return new(0, "没有合法能力技插槽");
         if (s.FastWildfireActive && wildfireHeat && MachinistFastBurst.CanHypercharge(s))
             return new(MCHSkill.超荷, "快速野火：接超荷，直接兑现热冲击");
-        if (!s.FastWildfireActive && wildfireHeat && s.WildfireLeft > 0 && s.WildfireHits < 6 && s.CanHypercharge && (!s.WildfireLead || s.LeadGcdDone))
+        if (!s.FastWildfireActive && !s.WildfireRecovery && wildfireHeat && s.WildfireLeft > 0 && s.WildfireHits < 6 && s.CanHypercharge && (!s.WildfireLead || s.LeadGcdDone))
             return new(MCHSkill.超荷, "野火路线：接超荷");
         if (s.WildfireLeft > 0 && s.WildfireLead && !s.LeadGcdDone)
             return new(0, "野火路线：先打预定普通GCD");
@@ -154,7 +142,8 @@ internal static class MachinistRules
             && (!s.WindowActive || s.WindowLeft >= 10 + EffectMargin))
             return new(MCHSkill.野火, "超荷QT关闭，按普通武器技能兑现野火");
         // 准备动作可以早于野火转好；同一G的两个位置先归完整野火，再安排其他能力技。
-        if ((wildfireHeat || s.Heated || s.FastBurst) && MachinistWildfire.TryPlan(s, out var wildfire, out _))
+        if ((wildfireHeat || s.Heated || s.FastBurst || MachinistWildfire.RecoveryNeeded(s))
+            && MachinistWildfire.TryPlan(s, out var wildfire, out _))
             return wildfire.Choice(s);
         if (s.InCombat && s.BarrelQt && s.FreeHypercharge <= 0 && s.FullMetal <= 0
             && (s.BarrelCd <= 0 || wildfireHeat && MachinistWildfire.Preparing(s)

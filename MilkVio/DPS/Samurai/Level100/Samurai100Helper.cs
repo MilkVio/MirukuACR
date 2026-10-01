@@ -2,6 +2,7 @@ using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Timeline;
 using GameActionManager = FFXIVClientStructs.FFXIV.Client.Game.ActionManager;
 using GameActionType = FFXIVClientStructs.FFXIV.Client.Game.ActionType;
 
@@ -104,13 +105,14 @@ public static class Samurai100Helper
     {
         var missing = 3 - JobGaugeHelper.SAM.GetSenCount();
         var toThree = GcdsToThreeSen();
-        var returns = (PromeSettings.Instance.GetQt(SAMQt.立即回返) ? 1 : 0) + (SamuraiHelper.Has燕回返() ? 1 : 0);
+        var immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀);
+        var returns = (immediate ? 1 : 0) + (SamuraiHelper.Has燕回返() ? 1 : 0);
         // 居合和回返也会占用明镜时间。
         var mirrorLeft = Core.Me.GetStatusLeftTime(SAMBuff.明镜止水);
         var nextSen = MeikyoStacks > missing && mirrorLeft > GcdRemain + (toThree + 1 + returns) * GcdSeconds + EffectMargin ? 1 : 2;
         var count = toThree + 1 + nextSen;
         if (includeNewMeikyo && MeikyoStacks == 0 &&
-            PromeSettings.Instance.GetQt(SAMQt.明镜止水) && SamuraiHelper.明镜止水层数() >= 1 &&
+            (PromeSettings.Instance.GetQt(SAMQt.明镜止水) || SamuraiTimeline.MirrorPending) && SamuraiHelper.明镜止水层数() >= 1 &&
             !Core.Me.HasStatus(SAMBuff.天道))
         {
             // 续完手上的连击、拿到雪后，可开明镜补月花。
@@ -134,8 +136,8 @@ public static class Samurai100Helper
 
     public static bool KeepOneSenForHiganbana()
     {
-        if (!UseHiganbana || JobGaugeHelper.SAM.GetSenCount() != 1) return false;
-        return HiganbanaLeft <= HiganbanaTimeAfter(GcdsToHiganbanaAfterThreeSen());
+        if (Core.Me == null || !UseHiganbana || JobGaugeHelper.SAM.GetSenCount() != 1) return false;
+        return Samurai100Projection.KeepSen(Samurai100Planning.ReadState());
     }
 
     public static bool WouldDelayHiganbana(int extraGcds)
@@ -153,19 +155,20 @@ public static class Samurai100Helper
         var castEnd = HiganbanaTimeAfter(0);
         if (count == 3)
         {
+            if (PromeSettings.Instance.GetQt(SAMQt.强制垫刀) && SamuraiHelper.Has燕回返()) return 居合类型.无;
             var tendo = Core.Me.GetStatusLeftTime(SAMBuff.天道);
             if (moon > castEnd || (tendo > castEnd && tendo <= HiganbanaTimeAfter(2)))
                 return 居合类型.雪月花;
             return 居合类型.无;
         }
         if (count != 1 || !UseHiganbana || moon <= castEnd) return 居合类型.无;
-        if (HiganbanaLeft <= HiganbanaTimeAfter(1)) return 居合类型.彼岸花;
+        if (Samurai100Rules.HiganbanaDue(Samurai100Planning.ReadState())) return 居合类型.彼岸花;
         if (!KeepOneSenForHiganbana()) return 居合类型.无;
+        if (!Samurai100Rules.CanRefreshHiganbana(Samurai100Planning.ReadState())) return 居合类型.无;
 
         // 明镜不能垫前段；普通连击垫完后保留收尾。
         var combo = GetComboId();
-        if (MeikyoStacks > 0 ||
-            (combo == SAMSkill.阵风 || combo == SAMSkill.士风) && HiganbanaLeft <= HiganbanaTimeAfter(2))
+        if (MeikyoStacks > 0 || combo == SAMSkill.阵风 || combo == SAMSkill.士风)
             return 居合类型.彼岸花;
         return 居合类型.无;
     }
@@ -175,6 +178,7 @@ public static class Samurai100Helper
         if (Samurai100Planning.TryGcd(out var planned, out _))
             return planned == SAMSkill.晓风 || planned == SAMSkill.阵风 || planned == SAMSkill.士风 ||
                    planned == SAMSkill.雪风 || planned == SAMSkill.月光 || planned == SAMSkill.花车 ? planned : 0;
+        if (Samurai100Rules.ForcedPaddingGcd(Samurai100Planning.ReadState(), out var filler)) return filler;
         if (MeikyoStacks > 0) return 0;
         var combo = GetComboId();
         var count = JobGaugeHelper.SAM.GetSenCount();
@@ -240,7 +244,8 @@ public static class Samurai100Helper
     public static bool ShouldUseMeikyo(out string reason)
     {
         reason = "保留明镜";
-        if (!PromeSettings.Instance.GetQt(SAMQt.明镜止水)) { reason = "未开启明镜QT"; return false; }
+        if (!PromeSettings.Instance.GetQt(SAMQt.明镜止水) && !SamuraiTimeline.MirrorPending)
+        { reason = "未开启明镜QT，也没有一次请求"; return false; }
         var charge = SamuraiHelper.明镜止水层数();
         if (charge < 1 || Core.Me.HasStatus(SAMBuff.明镜止水)) return false;
         if (Core.Me.HasStatus(SAMBuff.天道)) { reason = "先兑换已有天道"; return false; }
@@ -263,6 +268,9 @@ public static class Samurai100Helper
         { reason = "明镜取一闪续花"; return true; }
         if (count < 3 && Samurai100Burst.NeedSpaceWithOneWeave())
         { reason = "只有一个插入位，先泄剑气再开镜"; return false; }
+        if (SamuraiTimeline.MirrorPending) { reason = "执行时间轴一次明镜请求"; return true; }
+        if (Samurai100Rules.PreferOpeningMirror(Samurai100Planning.ReadState()))
+        { reason = "开场先用富余明镜，保留120准备余量"; return true; }
         if (count == 3 && (prepareFlower || PromeSettings.Instance.GetQt(SAMQt.倾泻资源)))
         {
             reason = "明镜准备天道居合";

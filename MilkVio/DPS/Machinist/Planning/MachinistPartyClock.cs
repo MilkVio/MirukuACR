@@ -1,6 +1,6 @@
 namespace MilkVio.DPS.Machinist.Planning;
 
-// 从实际出现的团辅校准下一轮120。未观察到、过期或换阶段时退回职业技能参考。
+// 只保留日志中的团辅观察时间，不参与资源规划。
 internal sealed class MachinistPartyClock
 {
     private long _start, _last;

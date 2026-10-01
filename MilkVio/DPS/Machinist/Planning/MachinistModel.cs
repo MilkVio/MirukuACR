@@ -12,6 +12,7 @@ internal static class MachinistModel
         s.AnchorCd = Left(s.AnchorCd, seconds); s.SawCd = Left(s.SawCd, seconds);
         s.WildfireCd = Left(s.WildfireCd, seconds); s.BarrelCd = Left(s.BarrelCd, seconds);
         s.HyperchargeCd = Left(s.HyperchargeCd, seconds);
+        s.HyperchargeRecoveryLeft = Left(s.HyperchargeRecoveryLeft, seconds);
         s.Drill = Math.Min(s.Level >= 94 ? 2 : 1, s.Drill + seconds / Math.Max(1, s.DrillRecast));
         s.ReassembleCharges = Math.Min(s.Level >= 84 ? 2 : 1, s.ReassembleCharges + seconds / 55);
         s.Gauss = Math.Min(3, s.Gauss + seconds / 30); s.Ricochet = Math.Min(3, s.Ricochet + seconds / 30);
@@ -19,7 +20,7 @@ internal static class MachinistModel
         s.Excavator = Left(s.Excavator, seconds); s.FullMetal = Left(s.FullMetal, seconds);
         s.Overheat = Left(s.Overheat, seconds); if (s.Overheat <= 0) s.OverheatStacks = 0;
         s.WildfireLeft = Left(s.WildfireLeft, seconds);
-        if (s.WildfireLeft <= 0) { s.WildfireLead = false; s.LeadGcdDone = false; s.FastWildfire = false; }
+        if (s.WildfireLeft <= 0) { s.WildfireLead = false; s.LeadGcdDone = false; s.FastWildfire = false; s.WildfireRecovery = false; }
         s.QueenLeft = Left(s.QueenLeft, seconds);
         s.QueenCd = Left(s.QueenCd, seconds);
         s.PartyLeft = Left(s.PartyLeft, seconds); s.PotionLeft = Left(s.PotionLeft, seconds);
@@ -44,7 +45,7 @@ internal static class MachinistModel
         _ => 0
     };
 
-    public static void Apply(ref MachinistState s, uint action)
+    public static void Apply(ref MachinistState s, uint action, bool recoveryWildfire = false)
     {
         if (MachinistRules.IsWeaponskill(action))
         {
@@ -71,7 +72,8 @@ internal static class MachinistModel
             case MCHSkill.热狙击弹3: case MCHSkill.狙击弹3: s.Combo = 0; s.ComboLeft = 0; break;
             case MCHSkill.超荷:
                 if (s.FreeHypercharge > 0) s.FreeHypercharge = 0; else s.Heat = Math.Max(0, s.Heat - 50);
-                s.HyperchargeCd = 10; s.Overheat = 10; s.OverheatStacks = 5; break;
+                s.HyperchargeCd = 10; s.Overheat = 10; s.OverheatStacks = 5;
+                s.HyperchargeRecoveryLeft = s.WildfireCd <= 10 + .001f ? MachinistWildfire.RecoveryWindow(s.Gcd) : 0; break;
             case MCHSkill.热冲击: case MCHSkill.烈焰弹: case MCHSkill.自动弩:
                 s.OverheatStacks = Math.Max(0, s.OverheatStacks - 1);
                 if (s.OverheatStacks == 0) s.Overheat = 0;
@@ -83,7 +85,10 @@ internal static class MachinistModel
             case MCHSkill.野火:
                 s.WildfireCd = 120; s.WildfireLeft = 10; s.WildfireHits = 0;
                 s.FastWildfire = s.FastBurst;
-                s.WildfireLead = !s.FastWildfire && !s.Heated && s.HyperchargeQt; s.LeadGcdDone = false; break;
+                s.WildfireRecovery = recoveryWildfire;
+                s.HyperchargeRecoveryLeft = 0;
+                s.WildfireLead = !s.FastWildfire && !s.WildfireRecovery && !s.Heated && s.HyperchargeQt;
+                s.LeadGcdDone = false; break;
             case MCHSkill.整备: s.ReassembleCharges = Math.Max(0, s.ReassembleCharges - 1); s.Reassemble = 5; break;
             case MCHSkill.双将: s.Gauss = Math.Max(0, s.Gauss - 1); break;
             case MCHSkill.将死: s.Ricochet = Math.Max(0, s.Ricochet - 1); break;

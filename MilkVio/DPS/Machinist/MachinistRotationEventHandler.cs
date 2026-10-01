@@ -20,14 +20,14 @@ public class MachinistRotationEventHandler : IRotationEventHandler
     public void OnBattleEnded()
     {
         MachinistHelper.ResetWeaveLimit();
-        MachinistPlanning.Reset("战斗结束", true);
+        MachinistPlanning.ResetSession("战斗结束");
         _rotation.DebugLog.CombatEnded(Environment.TickCount64, "战斗结束");
         PromeSettings.Instance.OpenerHasBeenExecuted = false;
     }
     public void OnTerritoryChanged(ushort territoryId)
     {
         MachinistHelper.ResetWeaveLimit();
-        MachinistPlanning.Reset("切换区域", true);
+        MachinistPlanning.ResetSession("切换区域");
         _rotation.DebugLog.CombatEnded(Environment.TickCount64, $"切换区域{territoryId}");
     }
 }

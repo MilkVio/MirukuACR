@@ -49,7 +49,8 @@ public class 超荷OffGcd : IDecisionResolver
                 return new CheckResult(true, "野火状态直接打 不管大技能");
             }
             
-            if (野火cd > 100 && (me.HasStatus(MCHStatus.全金属爆发预备) || me.HasStatus(MCHStatus.掘地飞轮预备)))
+            if (野火cd > 100 && (PromeSettings.Instance.GetQt(MCHQt.全金属爆发) && me.HasStatus(MCHStatus.全金属爆发预备)
+                || me.HasStatus(MCHStatus.掘地飞轮预备)))
             {
                 return new CheckResult(false, "等大技能");
             }

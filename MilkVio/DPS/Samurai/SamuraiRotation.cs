@@ -21,6 +21,7 @@ using PromeRotation.Updaters;
 using PromeRotation.Windows;
 using MilkVio.Common;
 using MilkVio.DPS.Samurai.Level100;
+using MilkVio.DPS.Samurai.Timeline;
 using PromeRotation.Extensions;
 using PromeRotation.Hosting;
 using PromeRotation.Timeline.Core;
@@ -67,6 +68,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         {SAMData.SAMQt.燕飞, true},
         {SAMData.SAMQt.真北, true},
         {SAMData.SAMQt.立即回返, false},
+        {SAMData.SAMQt.强制垫刀, false},
     };
     // 起手列表
     public static IReadOnlyDictionary<string, Type> Openers { get; } = new Dictionary<string, Type>
@@ -105,6 +107,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         // 画QT
         foreach (var (name, def) in QtList)
             PromeSettings.Instance.AddQt(name, def);
+        PromeSettings.Instance.HiddenQts.Remove(SAMQt.强制垫刀);
         
         var hotkeyPanel = new HotkeyPanel(columns: 5, title: "SAM Hotkeys");
         hotkeyPanel.AddHotkey("牵制", new PAction(MeleeUniversalSkill.牵制, ActionType.OffGcd, ActionTargetType.Target));
@@ -133,6 +136,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
                 ActionQueueManager.ClearAllQueues();
                 ActionUpdater.Reset();
                 Samurai100Planning.Reset("手动清扫队列");
+                SamuraiTimeline.ClearRequest("手动清扫队列");
                 Svc.Chat.PrintError("[PromeRotation] 清扫队列");
             }),
             customIconPath: "Resources/Clear.png");
@@ -336,7 +340,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
             details += $" 留一闪={Samurai100Helper.KeepOneSenForHiganbana()} 预计居合={Samurai100Helper.GetBestIaijutsu()} " +
                        $"花预计生效={Samurai100Helper.HiganbanaTimeAfter(Samurai100Helper.GcdsToNextHiganbana()):F3} " +
                        $"剑气留用={Samurai100Burst.ReservedKenki()} 下刀剑气={Samurai100Burst.NextKenkiGain()} " +
-                       $"规划={Samurai100Planning.Description} 用药={Samurai100Planning.Status}";
+                       $"规划={Samurai100Planning.Description} 用药={Samurai100Planning.Status} 明镜请求={SamuraiTimeline.Status}";
         return new SamuraiDebugState
         {
             Now = now, PlayerId = me.EntityId, Alive = !me.IsDead, InCombat = GameData.IsInCombat(), HasTarget = validTarget,
@@ -351,6 +355,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         DebugLog = CreateDebugLog();
         Samurai100Planning.WriteNote = note => DebugLog.ObserveNote(Environment.TickCount64, note);
         Samurai100Planning.Enter();
+        SamuraiTimeline.ResetSession("进入SAM");
         Svc.PluginInterface.UiBuilder.Draw += DrawPrediction;
         _subscriptions.Add(PromeEventBus.OnActionEffect(this, e =>
         {
@@ -395,6 +400,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
     {
         Svc.PluginInterface.UiBuilder.Draw -= DrawPrediction;
         ResetPrediction();
+        SamuraiTimeline.ResetSession("退出SAM");
         Samurai100Planning.Exit();
         foreach (var subscription in _subscriptions) subscription.Dispose();
         _subscriptions.Clear();
@@ -500,6 +506,9 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
             catch (Exception ex) { DebugLog.Fail(ex); }
         }
         ImGui.EndDisabled();
+        ImGui.SameLine();
+        if (ImGui.Button("请求一次明镜")) SamuraiTimeline.RequestMeikyo(false);
+        ImGui.Text($"当前明镜请求层数：{(SamuraiTimeline.MirrorPending ? 1 : 0)}");
         if (DebugLog.Enabled) ImGui.TextUnformatted(DebugLog.FilePath.Length == 0 ? "已开启，等待开战" : "SAM日志记录中");
         if (DebugLog.FilePath.Length > 0) ImGui.TextUnformatted(DebugLog.FilePath);
         if (DebugLog.Error.Length > 0) ImGui.TextUnformatted(DebugLog.Error);
@@ -509,6 +518,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         {
             ImGui.TextUnformatted(Samurai100Planning.Description);
             ImGui.TextUnformatted(Samurai100Planning.Status);
+            ImGui.TextUnformatted(SamuraiTimeline.Status);
             ImGui.Text($"百级单体：GCD {Samurai100Helper.GcdSeconds:F2}秒，彼岸花咏唱 {Samurai100Helper.CastSeconds(SAMSkill.彼岸花):F2}秒");
             ImGui.Text($"有效连击：{Samurai100Helper.GetComboId()}，自身彼岸花 {Samurai100Helper.HiganbanaLeft:F2}秒");
             ImGui.Text($"留一闪续花：{Samurai100Helper.KeepOneSenForHiganbana()}，预计居合：{Samurai100Helper.GetBestIaijutsu()}");

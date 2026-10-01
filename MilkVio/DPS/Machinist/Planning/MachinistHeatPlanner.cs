@@ -72,16 +72,16 @@ internal static class MachinistHeatPlanner
             if (!continued) resume = elapsed + dt;
             if (!continued && (s.ComboNext != combo || s.ComboLeft <= dt + MachinistRules.EffectMargin)
                 || s.Excavator > 0 && s.Excavator <= dt + MachinistRules.EffectMargin
-                || s.FullMetal > 0 && s.FullMetal <= dt + MachinistRules.EffectMargin) return false;
+                || s.FullMetalPending && s.FullMetal <= dt + MachinistRules.EffectMargin) return false;
             MachinistModel.Advance(ref s, dt); elapsed += dt;
             var action = MachinistRules.NormalGcd(s, planCombo: false).Action;
             // 有高威力预备时，不能把它从当前增益里挤出去来换热冲击覆盖。
-            if ((action == MCHSkill.全金属爆发 && initial.FullMetal > 0
+            if ((action == MCHSkill.全金属爆发 && initial.FullMetalPending
                 || action == MCHSkill.掘地飞轮 && initial.Excavator > 0)
                 && left > 0 && elapsed + MachinistRules.EffectMargin >= left) return false;
             if (action == combo) continued = true;
             MachinistModel.Apply(ref s, action);
-            if (!s.Heated && s.Excavator <= 0 && s.FullMetal <= 0 && continued) return true;
+            if (!s.Heated && s.Excavator <= 0 && !s.FullMetalPending && continued) return true;
         }
         return false;
     }
@@ -90,16 +90,29 @@ internal static class MachinistHeatPlanner
     {
         reason = "";
         var at = MachinistRules.BurstAt(s);
-        if (s.Level != 100 || s.AoeQt && s.Targets >= 3 || s.FreeHypercharge > 0
-            || !float.IsFinite(at) || at <= 0 || at > 90 || MachinistRules.BurstLeft(s) > 0) return false;
-        // 比较至下一次团辅结束，允许45热在桥接G补足，不能只检查冷却零点的量谱。
-        // 候选先持有热量至未来窗口；溢热或推迟野火时舍弃。电量仅调用无递归的插槽分配。
-        var horizon = at + 20 + s.Gcd;
+        if (s.Level != 100 || s.WindowActive || s.FastBurst || s.IsDump || !s.HyperchargeQt
+            || s.AoeQt && s.Targets >= 3 || s.FreeHypercharge > 0
+            || !float.IsFinite(at) || at <= 0 || MachinistRules.BurstLeft(s) > 0) return false;
+        // 自身120的目标是两轮可完整执行、至少部分落入窗口的过热。多推演一轮尾部，
+        // 避免只看进入时的50热或窗口内发数，漏掉续连击/工具期限及第二轮能否打完。
+        // 机器人只分配同一路线产生的电量和合法插槽，不递归调用热量许可。
+        var horizon = at + 20 + MachinistRules.HeatCycle + s.Gcd;
         var kept = MachinistProjection.Forecast(s, horizon, holdQueen: true, burstHeat: true, holdHeat: true);
         var spent = MachinistProjection.Forecast(s, horizon, MCHSkill.超荷, holdQueen: true, burstHeat: true, holdHeat: true);
-        if (kept.BurstShots <= spent.BurstShots || kept.HeatOverflow > spent.HeatOverflow
-            || kept.WildfireAt > spent.WildfireAt + .05f || kept.BurstBonus <= spent.BurstBonus + .5f) return false;
-        reason = $"为团辅双过热留热：覆盖{spent.BurstShots}→{kept.BurstShots}发，人物与机器人预计增益+{kept.BurstBonus - spent.BurstBonus:F0}";
-        return true;
+        var comparison = $"自身120距{at:F1}s；支出/保留：过热{spent.BurstCycles}/{kept.BurstCycles}轮，"
+            + $"烈焰弹{spent.BurstShots}/{kept.BurstShots}发，机器人{spent.QueenBattery}/{kept.QueenBattery}电，"
+            + $"溢热{spent.HeatOverflow}/{kept.HeatOverflow}，溢电{spent.QueenLost}/{kept.QueenLost}";
+        // 预测末端不是斩杀点；不能用截止时已打完的轮数差认定整场少一次过热。
+        // 热量溢出/免费预备期限由实际路线检查；已知阶段期限交给输出窗口规划。
+        string? release = !kept.Complete || !spent.Complete ? "预测未完成，按实况重算"
+            : spent.BurstCycles >= 2 ? "支出后仍能双过热"
+            : kept.BurstCycles < 2 ? "保留也无法安排第二轮，保护野火后正常支出"
+            : kept.HeatOverflow > spent.HeatOverflow ? "保留会额外溢热"
+            : kept.WildfireAt > spent.WildfireAt + .05f ? "保留路线会推迟野火"
+            : kept.QueenLost > spent.QueenLost ? "保留会额外溢电"
+            : s.QueenQt && kept.QueenBattery < Math.Min(80, spent.QueenBattery) ? "保留会损失本轮机器人或超过允许的电量取舍"
+            : null;
+        reason = release != null ? $"{release}；{comparison}" : $"为自身120双过热留热；{comparison}";
+        return release == null;
     }
 }

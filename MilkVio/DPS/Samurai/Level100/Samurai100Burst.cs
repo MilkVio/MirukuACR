@@ -24,7 +24,7 @@ public static class Samurai100Burst
         var gcd = Samurai100Helper.GcdSeconds;
         if (left <= Samurai100Helper.HiganbanaTimeAfter(2)) { reason = "奥义预备将到期"; return true; }
         if (Samurai100Helper.WouldDelayHiganbana(2)) { reason = "先安排彼岸花"; return false; }
-        if (SamuraiHelper.Has燕回返() && (PromeSettings.Instance.GetQt(SAMQt.立即回返) ||
+        if (SamuraiHelper.Has燕回返() && (PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀) ||
             SamuraiHelper.燕回返LeftTime() <= Samurai100Helper.GcdRemain + 3 * gcd))
         { reason = "先兑现回返"; return false; }
         var meikyo = Core.Me.GetStatusLeftTime(SAMBuff.明镜止水);
@@ -42,6 +42,12 @@ public static class Samurai100Burst
     {
         reason = "保留回返";
         if (!SamuraiHelper.Has燕回返()) return false;
+        if (PromeSettings.Instance.GetQt(SAMQt.强制垫刀))
+        {
+            var hold = Samurai100Rules.HoldTsubame(Samurai100Planning.ReadState());
+            reason = hold ? "强制垫刀，保留旧回返" : "回返将到期或必须居合，先清旧回返";
+            return !hold;
+        }
         if (PromeSettings.Instance.GetQt(SAMQt.立即回返)) { reason = "立即回返"; return true; }
         if (Samurai100Planning.TryGcd(out var planned, out reason)) return planned == SAMSkill.燕回返;
         var left = SamuraiHelper.燕回返LeftTime();

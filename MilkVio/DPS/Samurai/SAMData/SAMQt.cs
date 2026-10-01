@@ -15,4 +15,5 @@ public static class SAMQt
     public static string 燕飞 = "燕飞";
     public static string 真北 = "真北";
     public static string 立即回返 = "立即回返";
+    public static string 强制垫刀 = "强制垫刀";
 }

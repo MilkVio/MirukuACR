@@ -51,6 +51,7 @@ public class MachinistRotation : IRotation, IRotationLifecycle
     public static IReadOnlyDictionary<string, bool> QtList { get; } = new Dictionary<string, bool>
     {
         {MCHQt.枪管加热, true},
+        {MCHQt.全金属爆发, true},
         {MCHQt.野火, true},
         {MCHQt.超荷, true},
         {MCHQt.机器人, true},
@@ -94,6 +95,7 @@ public class MachinistRotation : IRotation, IRotationLifecycle
         // 画QT
         foreach (var (name, def) in QtList)
             PromeSettings.Instance.AddQt(name, def);
+        PromeSettings.Instance.HiddenQts.Add(MCHQt.全金属爆发);
         
         var hotkeyPanel = new HotkeyPanel(columns: 5, title: "MCH Hotkeys");
         hotkeyPanel.AddHotkey("亲疏自行", new PAction(MeleeUniversalSkill.亲疏自行, ActionType.OffGcd, ActionTargetType.Self));

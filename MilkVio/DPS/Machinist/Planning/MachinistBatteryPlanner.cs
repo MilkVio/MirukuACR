@@ -8,11 +8,13 @@ internal static class MachinistBatteryPlanner
 {
     internal readonly record struct Event(float At, int Gain, bool Summon);
     private readonly record struct Key(int Battery, int Ready);
-    private readonly record struct Path(float Value, float FirstAt, int FirstBattery, int Lost);
+    private readonly record struct Path(float Value, float FirstAt, int FirstBattery, int Lost,
+        int BurstBattery = 0, float BurstCoverage = 0);
     internal readonly record struct Advice(bool Summon, float At, int Battery, int Lost, string Reason)
     {
         internal float Value { get; init; }
         internal float WildfireAt { get; init; }
+        internal int BurstBattery { get; init; }
     }
 
     internal static Advice Choose(MachinistState initial)
@@ -64,6 +66,7 @@ internal static class MachinistBatteryPlanner
             || Math.Abs(a.Value - b.Value) <= .001f && (a.Lost < b.Lost
                 || a.Lost == b.Lost && a.FirstAt < b.FirstAt - .001f);
         var lastBonus = float.NaN;
+        var (burstStart, burstEnd) = MachinistRules.QueenWindow(initial);
         for (var i = 0; i < events.Count; i++)
         {
             var e = events[i];
@@ -88,9 +91,13 @@ internal static class MachinistBatteryPlanner
                 Keep(new(Math.Min(100, key.Battery + e.Gain), key.Ready),
                     path with { Value = path.Value - lost, Lost = path.Lost + lost });
                 if (!e.Summon || key.Battery < 50 || key.Ready > i) continue;
+                var coverage = key.Battery * MachinistQueen.Coverage(e.At, burstEnd, burstStart);
+                var bestBurst = coverage > path.BurstCoverage;
                 Keep(new(0, ready), path with { Value = path.Value + key.Battery * bonus,
                     FirstAt = float.IsFinite(path.FirstAt) ? path.FirstAt : e.At,
-                    FirstBattery = float.IsFinite(path.FirstAt) ? path.FirstBattery : key.Battery });
+                    FirstBattery = float.IsFinite(path.FirstAt) ? path.FirstBattery : key.Battery,
+                    BurstBattery = bestBurst ? key.Battery : path.BurstBattery,
+                    BurstCoverage = Math.Max(coverage, path.BurstCoverage) });
             }
             nodes = next;
         }
@@ -101,7 +108,7 @@ internal static class MachinistBatteryPlanner
             ? $"电量滚动分配：{best.FirstAt:F1}s后{best.FirstBattery}电召唤，预计溢电{best.Lost}"
             : "当前时序没有可兑现的召唤，按实况重算";
         return new(use, best.FirstAt, best.FirstBattery, best.Lost, reason)
-        { Value = best.Value };
+        { Value = best.Value, BurstBattery = best.BurstBattery };
     }
 
     private static List<Event> Timeline(MachinistState initial, float horizon, int delayCombos, out bool complete,
@@ -149,7 +156,7 @@ internal static class MachinistBatteryPlanner
                     var wait = Math.Max(0, choice.Delay - (s.GcdTotal - s.GcdLeft));
                     MachinistModel.Advance(ref s, wait); time += wait;
                     if (choice.Action == MCHSkill.野火) wildfireAt = Math.Min(wildfireAt, time);
-                    if (time < horizon) MachinistModel.Apply(ref s, choice.Action);
+                    if (time < horizon) MachinistModel.Apply(ref s, choice.Action, choice.RecoveryWildfire);
                     continue;
                 }
                 // 没有动作不能虚构一次插入。临近野火的热量许可可能在本G内改变，
@@ -175,7 +182,7 @@ internal static class MachinistBatteryPlanner
     {
         if (s.Level != 100 || !s.Alive || !s.HasTarget || !s.QueenQt || s.WindowActive || s.DumpQt || s.SawFirst || s.AoeQt && s.Targets >= 3
             || s.Heated || s.Reassemble > 0 || s.DamageWindow > 0 || s.Excavator <= 0
-            || s.FullMetal > 0 || s.FreeHypercharge > 0 || s.WildfireLeft > 0) return false;
+            || s.FullMetalPending || s.FreeHypercharge > 0 || s.WildfireLeft > 0) return false;
         var anchor = MachinistRules.BurstAt(s);
         if (anchor is <= 20 or > 100) return false;
         var gcds = s.ComboNext == MCHSkill.热狙击弹3 ? 1 : s.ComboNext == MCHSkill.热独头弹2 ? 2 : 3;

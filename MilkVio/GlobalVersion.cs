@@ -2,5 +2,5 @@
 
 public static class GlobalVersion
 {
-    public const string Version  = "1.5.6.2";
+    public const string Version  = "1.9.6.2";
 }

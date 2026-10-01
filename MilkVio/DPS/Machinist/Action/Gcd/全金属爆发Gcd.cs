@@ -10,6 +10,7 @@ public class 全金属爆发Gcd : IDecisionResolver
 {
     public CheckResult Check()
     {
+        if (!PromeSettings.Instance.GetQt(MCHQt.全金属爆发)) return new CheckResult(false, "全金属爆发QT关闭");
         var currentAttackRange = GameData.GetCurrentAttackRange(25);
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");

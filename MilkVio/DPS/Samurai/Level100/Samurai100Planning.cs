@@ -1,4 +1,5 @@
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Timeline;
 using PromeRotation.Data;
 using PromeRotation.Extensions;
 using PromeRotation.Helpers;
@@ -79,6 +80,7 @@ internal static class Samurai100Planning
     public static void Update(long now)
     {
         if (!_entered) return;
+        SamuraiTimeline.Update();
         if (Core.Me == null || Core.Me.IsDead || !GameData.IsInCombat() || !Samurai100Helper.Enabled)
         {
             if (_pending || _plan != null) Reset("死亡、脱战或离开百级单体");
@@ -133,6 +135,7 @@ internal static class Samurai100Planning
         if (!_entered || Core.Me == null || source != Core.Me.EntityId) return;
         if (_effectSequence == sequence && _effectAction == action && now - _effectAt < 1000) return;
         _effectSequence = sequence; _effectAction = action; _effectAt = now;
+        if (action == SAMSkill.明镜止水 && SamuraiTimeline.MirrorPending) SamuraiTimeline.ClearRequest("已确认明镜成功");
         _plan = null; _readAt = 0;
         var big = action == SAMSkill.纷乱雪月花 || action == SAMSkill.天道雪月花 || action == SAMSkill.回返雪月花 ||
                   action == SAMSkill.天道回返雪月花 || action == SAMSkill.奥义斩浪 || action == SAMSkill.回返斩浪;
@@ -170,6 +173,8 @@ internal static class Samurai100Planning
         use = _plan!.OffGcd == action;
         reason = use ? _plan.Summary : _plan.OffGcd == 0 ? "当前没有适合插入的技能" :
             $"当前优先{SamuraiDebugLog.ActionName(_plan.OffGcd)}；{Samurai100Rules.Phase(_state)}";
+        if (action == SAMSkill.意气冲天 && !use &&
+            !Samurai100Rules.CanIkishoten(ReadBudgetState(), out var ikiReason)) reason = ikiReason;
         if (action == SAMSkill.必杀剑_震天)
         {
             var spend = Samurai100Rules.SpendKenki(ReadBudgetState(), out var kenkiReason);
@@ -216,7 +221,8 @@ internal static class Samurai100Planning
             (a.Party > 0) == (b.Party > 0) &&
             a.UseDot == b.UseDot && a.UseMirror == b.UseMirror && a.UseIki == b.UseIki && a.UseSenei == b.UseSenei &&
             a.UseOgi == b.UseOgi && a.UseZanshin == b.UseZanshin && a.UseShinten == b.UseShinten && a.UseShoha == b.UseShoha &&
-            a.Immediate == b.Immediate && a.Dump == b.Dump;
+            a.Immediate == b.Immediate && a.Dump == b.Dump && a.ForcePadding == b.ForcePadding &&
+            a.MirrorRequested == b.MirrorRequested && a.AutoMirror == b.AutoMirror;
     }
 
     // 只从自动能力技入口调用；起手期间宿主不会走这里。
@@ -305,10 +311,13 @@ internal static class Samurai100Planning
             BattleTime = (float)EngageManager.GetBattleTime(), Eye = me.GetStatusLeftTime(SAMBuff.天眼通),
             Position = TargetHelper.GetTargetPositional(), TrueNorth = me.GetStatusLeftTime(1250),
             NeedsPosition = Core.Target != null && TargetHelper.HasPositionalRequirement(Core.Target),
-            UseDot = Samurai100Helper.UseHiganbana, UseMirror = PromeSettings.Instance.GetQt(SAMQt.明镜止水),
+            UseDot = Samurai100Helper.UseHiganbana,
+            UseMirror = PromeSettings.Instance.GetQt(SAMQt.明镜止水) || SamuraiTimeline.MirrorPending,
+            AutoMirror = PromeSettings.Instance.GetQt(SAMQt.明镜止水), MirrorRequested = SamuraiTimeline.MirrorPending,
             UseIki = SamuraiHelper.AllowIkishoten, UseSenei = SamuraiHelper.AllowSenei, UseOgi = SamuraiHelper.AllowOgi,
             UseZanshin = SamuraiHelper.AllowZanshin, UseShinten = SamuraiHelper.AllowShinten, UseShoha = PromeSettings.Instance.GetQt(SAMQt.照破),
-            Immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返), Dump = PromeSettings.Instance.GetQt(SAMQt.倾泻资源)
+            Immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀),
+            ForcePadding = PromeSettings.Instance.GetQt(SAMQt.强制垫刀), Dump = PromeSettings.Instance.GetQt(SAMQt.倾泻资源)
         };
     }
 }

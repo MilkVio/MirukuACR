@@ -5,6 +5,41 @@ namespace MilkVio.DPS.Samurai.Level100;
 
 internal static class Samurai100Rules
 {
+    public static bool HoldTsubame(Samurai100State s)
+    {
+        if (!s.ForcePadding || s.ReturnLeft <= s.GcdLeft + s.Gcd + Samurai100Helper.EffectMargin) return false;
+        if (s.SenCount != 3) return true;
+        var combo = s.ComboLeft > s.GcdLeft + Samurai100Helper.EffectMargin ? s.Combo : 0;
+        if (s.MirrorStacks > 0 || combo == SAMSkill.阵风 || combo == SAMSkill.士风) return false;
+        var fillers = combo == SAMSkill.晓风 ? 1 : 2;
+        // 先清旧回返再居合，不能把天道垫过期。
+        if (s.Tendo > 0 && s.Tendo <= s.GcdLeft + (fillers + 1) * s.Gcd + s.Cast + Samurai100Helper.EffectMargin) return false;
+        return true;
+    }
+
+    public static bool ForcedPaddingGcd(Samurai100State s, out uint action)
+    {
+        action = 0;
+        if (!s.ForcePadding || s.ReturnLeft <= 0 || s.SenCount != 3 || !HoldTsubame(s)) return false;
+        if (s.Distance > s.MeleeRange) return true;
+        var combo = s.ComboLeft > s.GcdLeft + Samurai100Helper.EffectMargin ? s.Combo : 0;
+        action = combo == SAMSkill.晓风 ? s.Moon <= s.Flower ? SAMSkill.阵风 : SAMSkill.士风 : SAMSkill.晓风;
+        return true;
+    }
+
+    // 再垫一刀会断花，就在本G开始读条。
+    public static bool HiganbanaDue(Samurai100State s) => s.UseDot && s.SenCount == 1 &&
+        s.Dot <= s.GcdLeft + s.Gcd + s.Cast + Samurai100Helper.EffectMargin;
+
+    // 普通覆盖最多5秒；已有明镜将过期时先恢复循环。
+    public static bool CanRefreshHiganbana(Samurai100State s) =>
+        s.Dot <= s.GcdLeft + s.Cast + Samurai100Helper.EffectMargin + 5 ||
+        s.MirrorStacks > 0 && s.MirrorLeft <= s.GcdLeft + (s.MirrorStacks + 1) * s.Gcd;
+
+    // 开场先兑现富余的一层，仍给首个120留下两层的准备余量。
+    public static bool PreferOpeningMirror(Samurai100State s) => s.BattleTime >= 0 && s.BattleTime < 60 &&
+        s.UseIki && s.IkiCd > 55 && s.MirrorCharges - 1 + s.IkiCd / 55 >= 2;
+
     public static uint WaitingIaijutsu(Samurai100State s, bool keepSen)
     {
         var ready = s.GcdLeft + Samurai100Helper.EffectMargin;
@@ -71,10 +106,8 @@ internal static class Samurai100Rules
         { reason = "先用照破，防止剑压溢出"; return false; }
         if (!s.UseShinten) { reason = "震天关闭，意气好了就用"; return true; }
         if (s.Kenki > 50) { reason = "先腾出50剑气空间"; return false; }
-        var canSpendAfter = s.MaxWeaves > 1 && s.GcdLeft >= 2 * Samurai100Projection.AbilityLock &&
-            (s.UseZanshin && s.ZanshinCd <= Samurai100Projection.AbilityLock ||
-             s.UseSenei && s.SeneiCd <= Samurai100Projection.AbilityLock && s.Moon > 0 && s.Distance <= s.MeleeRange);
-        if (!canSpendAfter && s.Kenki >= 25 && s.Distance <= s.MeleeRange && s.Kenki + NextGain(s) + (s.Eye > 0 ? 10 : 0) > 50)
+        if (!CanSpendAfterIkishoten(s) && s.Kenki >= 25 && s.Distance <= s.MeleeRange &&
+            s.Kenki + NextGain(s) + (s.Eye > 0 ? 10 : 0) > 50)
         { reason = "先泄剑气，给下一刀留空间"; return false; }
         return true;
     }
@@ -114,6 +147,11 @@ internal static class Samurai100Rules
 
     public static int NextGain(Samurai100State s) => KenkiGain(Samurai100Projection.NextResourceGcd(s));
 
+    public static bool CanSpendAfterIkishoten(Samurai100State s) =>
+        s.MaxWeaves > 1 && s.GcdLeft >= 2 * Samurai100Projection.AbilityLock &&
+        (s.UseZanshin && s.ZanshinCd <= Samurai100Projection.AbilityLock && s.Distance <= s.OgiRange ||
+         s.UseSenei && s.SeneiCd <= Samurai100Projection.AbilityLock && s.Moon > 0 && s.Distance <= s.MeleeRange);
+
     public static int Reserve(Samurai100State s)
     {
         // 暂停技能仍保留重开预算；远期闪影由途中连击供气。
@@ -125,10 +163,7 @@ internal static class Samurai100Rules
 
     public static int BeforeIkiLimit(Samurai100State s)
     {
-        var income = Samurai100Projection.IncomeBefore(s, Math.Max(s.GcdLeft, s.IkiCd) + Samurai100Helper.EffectMargin, false);
-        if (s.UseSenei && s.SeneiCd <= s.IkiCd && s.Moon > s.SeneiCd &&
-            s.Distance <= s.MeleeRange && s.Kenki + income >= 25) income = Math.Max(0, income - 25);
-        return 50 - income - (s.Eye > 0 ? 10 : 0);
+        return Samurai100Projection.BeforeIkishotenLimit(s) - (s.Eye > 0 ? 10 : 0);
     }
 
     public static bool SpendKenki(Samurai100State s, out string reason)
@@ -145,9 +180,12 @@ internal static class Samurai100Rules
         if (s.Kenki > 85 && s.Meditation == 2 && s.UseShoha &&
             (next == SAMSkill.纷乱雪月花 || next == SAMSkill.彼岸花))
         { reason = "居合后要照破，提前留剑气空间"; return true; }
-        if (s.Kenki - 25 < Reserve(s)) return false;
-        if (Preparing(s) && s.Kenki > BeforeIkiLimit(s))
-        { reason = "按近期收入腾出意气空间"; return true; }
+        var reserve = Reserve(s);
+        // 意气马上补气，不能为后续闪影留气反而挡住意气。
+        if (Preparing(s) && s.Kenki > BeforeIkiLimit(s) &&
+            (s.IkiCd <= s.GcdLeft + s.Gcd || s.Kenki - 25 >= reserve))
+        { reason = "按意气的实际插入位提前泄剑气"; return true; }
+        if (s.Kenki - 25 < reserve) return false;
         if (Spending(s) || s.Potion > Samurai100Helper.EffectMargin || s.Party > Samurai100Helper.EffectMargin || s.Dump)
         { reason = s.Potion > 0 ? "药内消费剩余剑气" : "当前爆发消费剩余剑气"; return true; }
         if (Preparing(s)) { reason = "为将就绪的意气集中剑气"; return false; }

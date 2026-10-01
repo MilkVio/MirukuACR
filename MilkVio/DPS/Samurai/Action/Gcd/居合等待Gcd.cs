@@ -11,6 +11,9 @@ public class 居合等待Gcd : IDecisionResolver
         if (Core.Me == null || Core.Target == null || Core.Target.IsDead || !Core.Target.IsTargetable ||
             Core.Target.EntityId == Core.Me.EntityId || !Samurai100Helper.Enabled)
             return new CheckResult(false, "当前不接管居合等待");
+        var s = Samurai100Planning.ReadState();
+        if (Samurai100Rules.HoldTsubame(s) && s.Distance > s.MeleeRange)
+            return new CheckResult(true, "强制垫刀，等待回到连击距离");
         if (Samurai100Helper.WaitingIaijutsu() == 0) return new CheckResult(false, "无需保留连击等待");
         return new CheckResult(true, Samurai100Rules.WaitReason(Samurai100Planning.ReadState()));
     }

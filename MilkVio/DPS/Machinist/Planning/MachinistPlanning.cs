@@ -18,12 +18,13 @@ internal static class MachinistPlanning
     private static readonly HashSet<uint> WildfireSequences = new();
     private static readonly uint[] PartyBuffs = { 1822, 1848, 1825, 141, 2964, 2599, 1297, 2703, 3685, 1182, 1185, 786, 1878, 3887 };
     private static bool _entered;
+    private static bool? _fullMetalQt;
     private static float _actionLock = .65f;
     private static long _budgetAt, _wildfireAt, _queenUntil, _hyperchargeAt, _lastWildfireAt;
     private static int _effectCount, _effectOverflow;
     private static ulong _wildfireTarget;
     private static int _wildfireHits;
-    private static bool _wildfireLead, _leadGcdDone, _wildfireFast;
+    private static bool _wildfireLead, _leadGcdDone, _wildfireFast, _wildfireRecovery;
     private static readonly MachinistDispatch Dispatch = new();
     private static readonly MachinistPartyClock PartyClock = new();
     private static MachinistState _budgetState;
@@ -34,18 +35,27 @@ internal static class MachinistPlanning
 
     public static void Enter()
     {
-        Reset("进入MCH", true); _entered = true;
+        ResetSession("进入MCH"); _entered = true;
         Dispatch.WriteNote = message => WriteNote?.Invoke(message);
         Window.Changed = (_, message) => { _budgetAt = 0; WriteNote?.Invoke(message); };
     }
-    public static void Exit() { _entered = false; Reset("离开MCH", true); Window.Changed = null; WriteNote = null; }
+    public static void Exit() { _entered = false; ResetSession("离开MCH"); Window.Changed = null; WriteNote = null; }
+    // 隐藏QT只在一场战斗/职业结束时复位；死亡、复活、无目标和普通重算保留轴的控制。
+    public static void ResetSession(string reason)
+    {
+        if (!PromeSettings.Instance.GetQt(MCHQt.全金属爆发))
+            WriteNote?.Invoke($"[MCH] 全金属QT恢复开启：{reason}");
+        PromeSettings.Instance.SetQt(MCHQt.全金属爆发, true);
+        _fullMetalQt = null;
+        Reset(reason, true);
+    }
     public static void Reset(string reason, bool clearWindow = false)
     {
         Dispatch.Reset();
         PartyClock.Reset();
         _actionLock = .65f;
         _budgetAt = _wildfireAt = _queenUntil = _hyperchargeAt = _lastWildfireAt = 0;
-        _wildfireTarget = 0; _wildfireHits = 0; _wildfireLead = _leadGcdDone = _wildfireFast = false;
+        _wildfireTarget = 0; _wildfireHits = 0; _wildfireLead = _leadGcdDone = _wildfireFast = _wildfireRecovery = false;
         Seen.Clear(); WildfireSequences.Clear();
         while (Effects.TryDequeue(out _)) Interlocked.Decrement(ref _effectCount);
         if (clearWindow) Window.Reset(reason);
@@ -103,9 +113,10 @@ internal static class MachinistPlanning
                 _wildfireAt = effect.At; _wildfireTarget = effect.Target; _wildfireHits = 0;
                 WildfireSequences.Clear();
                 _wildfireFast = Core.Me.Level == 100 && Dispatch.WasFastWildfire(effect.Sequence, effect.Target);
-                _wildfireLead = !_wildfireFast && now - _hyperchargeAt > 2500 && !Core.Me.HasStatus(MCHStatus.过热);
+                _wildfireRecovery = Core.Me.Level == 100 && Dispatch.WasRecoveryWildfire(effect.Sequence, effect.Target);
+                _wildfireLead = !_wildfireFast && !_wildfireRecovery && now - _hyperchargeAt > 2500 && !Core.Me.HasStatus(MCHStatus.过热);
                 _leadGcdDone = false;
-                WriteNote?.Invoke($"野火已应用 目标={_wildfireTarget:X} 路线={(_wildfireFast ? "快速野火，按资源直接衔接" : _wildfireLead ? "普通GCD后超荷" : "超荷后野火")}");
+                WriteNote?.Invoke($"野火已应用 目标={_wildfireTarget:X} 路线={(_wildfireFast ? "快速野火，按资源直接衔接" : _wildfireRecovery ? "异常恢复，兑现已有过热" : _wildfireLead ? "普通GCD后超荷" : "超荷后野火")}");
             }
             if (MachinistRules.IsWeaponskill(effect.Action))
             {
@@ -115,15 +126,22 @@ internal static class MachinistPlanning
         if (_wildfireAt > 0 && now >= _wildfireAt + 10000)
         {
             WriteNote?.Invoke($"野火观察结束：{_wildfireHits}/6次原目标武器技能效果");
-            _wildfireAt = 0; _wildfireLead = _leadGcdDone = _wildfireFast = false;
+            _wildfireAt = 0; _wildfireLead = _leadGcdDone = _wildfireFast = _wildfireRecovery = false;
         }
         var s = ReadState();
+        if (_fullMetalQt != s.FullMetalQt)
+        {
+            _budgetAt = 0;
+            if (_fullMetalQt != null || !s.FullMetalQt)
+                WriteNote?.Invoke($"[MCH] 全金属QT={(s.FullMetalQt ? "开启，按当前优先级恢复" : "关闭，自动求解保留预备")}；预备剩余{s.FullMetal:F2}s");
+            _fullMetalQt = s.FullMetalQt;
+        }
         PartyClock.Observe(s);
         s.PartyCycle = PartyClock.StartIn(now);
-        if (_wildfireFast && (!s.HasTarget || s.TargetId != _wildfireTarget || s.Level != 100))
+        if ((_wildfireFast || _wildfireRecovery) && (!s.HasTarget || s.TargetId != _wildfireTarget || s.Level != 100))
         {
-            WriteNote?.Invoke("快速野火路线结束：目标不可用/切换目标/等级不再为100，按实况恢复");
-            _wildfireAt = 0; _wildfireLead = _leadGcdDone = _wildfireFast = false; _budgetAt = 0;
+            WriteNote?.Invoke("野火特殊路线结束：目标不可用/切换目标/等级不再为100，按实况恢复");
+            _wildfireAt = 0; _wildfireLead = _leadGcdDone = _wildfireFast = _wildfireRecovery = false; _budgetAt = 0;
             s = ReadState();
         }
         Dispatch.Update(s, GcdStarted(s.Now), MachinistHost.Busy);
@@ -145,7 +163,7 @@ internal static class MachinistPlanning
     private static bool BudgetChanged(MachinistState a, MachinistState b) => a.Heat != b.Heat || a.Battery != b.Battery
         || a.QtKey != b.QtKey || a.WindowVersion != b.WindowVersion || a.TargetId != b.TargetId
         || a.Targets != b.Targets || a.Weaves != b.Weaves || a.WeaveLimit != b.WeaveLimit || a.Level != b.Level
-        || a.FastWildfireActive != b.FastWildfireActive
+        || a.FastWildfireActive != b.FastWildfireActive || a.WildfireRecovery != b.WildfireRecovery
         || Math.Abs(a.ActionLock - b.ActionLock) > .05f
         || (a.WindowLeft > 0) != (b.WindowLeft > 0) || (a.ReserveLeft > 0) != (b.ReserveLeft > 0)
         || (a.QueenLeft > 0) != (b.QueenLeft > 0) || (a.WildfireCd > 0) != (b.WildfireCd > 0)
@@ -160,6 +178,11 @@ internal static class MachinistPlanning
         if (!s.Alive || !s.HasTarget) return null;
         var choice = Dispatch.NextGcd(s);
         reason = choice.Reason;
+        if (!s.FullMetalQt && s.FullMetal > 0)
+            reason += "；全金属QT关闭，保留预备";
+        // 交还宿主前复查开关；已经交出的宿主队列不在本地撤回。
+        if (choice.Action == MCHSkill.全金属爆发 && !PromeSettings.Instance.GetQt(MCHQt.全金属爆发))
+        { reason = "全金属QT已关闭，重新求解"; return null; }
         return choice.Action == 0 ? null : new(choice.Action, ActionType.Gcd, ActionTargetType.Target);
     }
 
@@ -175,7 +198,7 @@ internal static class MachinistPlanning
             choice.Action is MCHSkill.野火 or MCHSkill.双将 or MCHSkill.将死 ? ActionTargetType.Target : ActionTargetType.Self);
         if (!NativeReady(action, out var status)) { reason = $"能力技尚不可提交：{choice.Action} 状态={status}"; return null; }
         return Dispatch.Issue(s, action.ActionId, action.ActionId.GetAdjustedActionId(),
-            choice.Action == MCHSkill.整备 ? tool : 0) ? action : null;
+            choice.Action == MCHSkill.整备 ? choice.Tool != 0 ? choice.Tool : tool : 0) ? action : null;
     }
 
     public static uint HeldTool => Dispatch.HeldTool(ReadState());
@@ -223,6 +246,7 @@ internal static class MachinistPlanning
         }
         bool Qt(string key) => PromeSettings.Instance.GetQt(key);
         var target = Core.Target;
+        var gcd = Recast(MCHSkill.热分裂弹1, 2.5f);
         var s = new MachinistState
         {
             Now = now, PlayerId = me.EntityId, TargetId = target?.EntityId ?? 0, Level = me.Level,
@@ -232,7 +256,7 @@ internal static class MachinistPlanning
             Targets = Qt(MCHQt.AOE) && target != null && me.DistanceToMe() <= 12
                 ? TargetHelper.GetEnemyCountInsideSector(me, target, 12, 90) : 1,
             Heat = JobGaugeHelper.MCH.Heat, Battery = JobGaugeHelper.MCH.Battery,
-            Gcd = Recast(MCHSkill.热分裂弹1, 2.5f),
+            Gcd = gcd, HyperchargeRecoveryLeft = Dispatch.HyperchargeRecoveryLeft(now, gcd),
             GcdLeft = recast != null && recast->IsActive
                 ? Math.Min(Math.Max(0, recast->Total - recast->Elapsed), Math.Max(0, ActionHelper.GetGcdRemain())) : 0,
             GcdTotal = recast != null && recast->IsActive ? recast->Total : 0, Lock = Math.Max(0, ActionHelper.GetAnimationLock()),
@@ -253,9 +277,9 @@ internal static class MachinistPlanning
             QueenCd = Cd(MachinistHelper.GetCurrentRobotActionId()),
             WildfireLeft = _wildfireAt > 0 && target?.EntityId == _wildfireTarget ? Math.Max(0, 10 - (now - _wildfireAt) / 1000f) : 0,
             WildfireHits = _wildfireHits, WildfireLead = _wildfireLead, LeadGcdDone = _leadGcdDone,
-            FastWildfire = _wildfireFast,
+            FastWildfire = _wildfireFast, WildfireRecovery = _wildfireRecovery,
             PartyLeft = PartyBuffs.Max(id => me.GetStatusLeftTime(id)), PartyCycle = PartyClock.StartIn(now), PotionLeft = me.GetStatusLeftTime(49),
-            WildfireQt = Qt(MCHQt.野火), HyperchargeQt = Qt(MCHQt.超荷), BarrelQt = Qt(MCHQt.枪管加热),
+            WildfireQt = Qt(MCHQt.野火), HyperchargeQt = Qt(MCHQt.超荷), BarrelQt = Qt(MCHQt.枪管加热), FullMetalQt = Qt(MCHQt.全金属爆发),
             QueenQt = Qt(MCHQt.机器人), ReassembleQt = Qt(MCHQt.整备), AoeQt = Qt(MCHQt.AOE),
             SawFirst = Qt(MCHQt.先打飞锯), DumpQt = Qt(MCHQt.倾泻资源), FastBurstQt = Qt(MCHQt.快速爆发)
         };

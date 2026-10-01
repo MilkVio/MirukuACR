@@ -4,6 +4,7 @@ public static class MCHQt
 {
     public const string 超荷 = "超荷";
     public const string 枪管加热 = "枪管加热";
+    public const string 全金属爆发 = "全金属爆发";
     public const string 机器人 = "机器人";
     public const string 野火 = "野火";
     public const string AOE = "AOE";

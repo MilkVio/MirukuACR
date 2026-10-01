@@ -40,9 +40,8 @@ internal static class MachinistDamage
     internal static float Multiplier(MachinistState s, float at)
     {
         if (at < s.DamageWindow) return 1 + BurstBonus;
-        if (s.PartyCycle is { } observed)
-            return at >= observed && (at - observed) % 120 < 20 ? 1 + BurstBonus : 1;
-        // 实际增益结束后，只参考启用的下一轮120；所有伤害仍由调用方裁至可输出期限。
+        // 统一按自身120估计覆盖，不用队伍团辅强弱决定是否准备双过热。
+        // 这个加成只比较召唤/输出窗口候选，不是平峰能否花掉预留热量的许可。
         var cd = MachinistRules.BurstAt(s);
         if (!float.IsFinite(cd)) return 1;
         var start = cd > 100 ? cd - 120 : cd;

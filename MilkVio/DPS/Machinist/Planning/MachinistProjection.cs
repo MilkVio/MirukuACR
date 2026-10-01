@@ -5,8 +5,12 @@ namespace MilkVio.DPS.Machinist.Planning;
 internal readonly record struct MachinistForecast(MachinistState End, int HeatOverflow, int BatteryOverflow,
     float Reached100, float BurstBattery, float WildfireAt)
 {
-    internal float BurstBonus { get; init; }
     internal int BurstShots { get; init; }
+    internal int BurstCycles { get; init; }
+    internal int HeatCycles { get; init; }
+    internal int QueenBattery { get; init; }
+    internal int QueenLost { get; init; }
+    internal bool Complete { get; init; }
 }
 internal readonly record struct MachinistBudget(bool Queen, bool Heat, bool WildfireHeat, string Reason)
 {
@@ -26,6 +30,9 @@ internal static class MachinistProjection
         if (!s.Alive || !s.HasTarget) return new(false, false, false, "自身/目标不可用，等待实况恢复");
         if (s.WindowActive)
         {
+            if (MachinistRules.Slots(s) == 0)
+                return new(false, false, false, "当前GCD无可用能力技插槽")
+                { WindowVersion = s.WindowVersion, QtKey = s.QtKey, Target = s.TargetId };
             var plan = MachinistWindowPlanner.Choose(s, true);
             return new(plan.Choice.Action == MCHSkill.后式自走人偶, plan.Choice.Action == MCHSkill.超荷,
                 plan.Choice.Action is MCHSkill.超荷 or MCHSkill.野火, plan.Reason)
@@ -47,7 +54,15 @@ internal static class MachinistProjection
 
     public static bool CanSpendHeat(MachinistState s, out string reason) => CanSpendHeat(s, out reason, out _);
 
-    internal static bool CanSpendHeat(MachinistState s, out string reason, out bool revisitTiming)
+    internal static bool CanSpendHeat(MachinistState s, out string reason, out bool revisitTiming) =>
+        CanSpendHeat(s, out reason, out revisitTiming, reserveBurst: true);
+
+    // 窗口已在逐路线比较热量、机器人和期末资源，只复用野火时点验算。
+    // 不在每个未来插槽中再套一层常规120双过热/机器人分配。
+    internal static bool CanSpendWindowHeat(MachinistState s) => CanSpendHeat(
+        s with { WindowActive = false, GoalHeat = 0, GoalBattery = 0 }, out _, out _, reserveBurst: false);
+
+    private static bool CanSpendHeat(MachinistState s, out string reason, out bool revisitTiming, bool reserveBurst)
     {
         revisitTiming = false;
         if (!s.Alive || !s.HasTarget) { reason = "自身/目标不可用"; return false; }
@@ -65,8 +80,9 @@ internal static class MachinistProjection
         { reason = "当前兑现窗口，过热后预备与连击可及时恢复"; return true; }
         if (!s.WildfireQt)
         {
-            if (MachinistHeatPlanner.Reserve(s, out reason)) return false;
-            reason = "野火QT关闭，无野火热量硬性预留"; return true;
+            if (reserveBurst && MachinistHeatPlanner.Reserve(s, out reason)) return false;
+            if (reason.Length == 0) reason = "野火QT关闭，无野火热量硬性预留";
+            return true;
         }
         if (s.WildfireCd <= 0) { reason = "由野火路线安排超荷"; return false; }
         var after = HeatForecast(s, s.WildfireCd, MCHSkill.超荷).End;
@@ -89,8 +105,8 @@ internal static class MachinistProjection
             if (float.IsFinite(kept) && spent > kept + .05f)
             { revisitTiming = true; reason = "保留热量可更早开野火，枪管/插槽不能及时补位"; return false; }
         }
-        if (MachinistHeatPlanner.Reserve(s, out reason)) return false;
-        reason = $"可支出；下次野火预计热{after.Heat} 免费={free}";
+        if (reserveBurst && MachinistHeatPlanner.Reserve(s, out reason)) return false;
+        if (reason.Length == 0) reason = $"可支出；下次野火预计热{after.Heat} 免费={free}";
         return true;
     }
 
@@ -140,18 +156,27 @@ internal static class MachinistProjection
 
     private static bool WindowChoiceUsable(MachinistState s, MachinistChoice choice) => choice.Action switch
     {
-        MCHSkill.超荷 => s.CanHypercharge,
+        MCHSkill.超荷 => MachinistWindowPlanner.HyperchargeAllowed(s),
         MCHSkill.后式自走人偶 => s.QueenQt && s.Battery >= 50 && s.QueenLeft <= 0 && s.QueenCd <= 0
             && s.WindowLeft > MachinistQueen.FirstHit + MachinistRules.EffectMargin,
         MCHSkill.野火 => s.WildfireQt && s.WildfireLeft <= 0 && (!s.HyperchargeQt
             ? s.WindowLeft >= 10 + MachinistRules.EffectMargin
-            : MachinistWildfire.TryPlan(s, out var plan, out _) && plan.Choice(s).Action == MCHSkill.野火),
+            : MachinistWildfire.TryPlan(s, out var plan, out _) && plan.Choice(s).Action == MCHSkill.野火
+                && choice.RecoveryWildfire == (plan.Route == MachinistWildfireRoute.Recover)),
         MCHSkill.枪管加热 => s.BarrelQt && s.InCombat && s.FreeHypercharge <= 0 && s.FullMetal <= 0,
-        MCHSkill.整备 => s.ReassembleQt && s.ReassembleCharges >= 1 && s.Reassemble <= 0 && !s.Heated,
+        MCHSkill.整备 => s.ReassembleQt && s.ReassembleCharges >= 1 && s.Reassemble <= 0 && !s.Heated
+            && WindowToolUsable(s, choice.Tool),
         MCHSkill.双将 => s.Gauss >= 1,
         MCHSkill.将死 => s.Ricochet >= 1,
         _ => choice.Action == 0
     };
+
+    private static bool WindowToolUsable(MachinistState s, uint tool)
+    {
+        MachinistModel.Advance(ref s, s.GcdLeft);
+        return MachinistRules.ToolReady(s, tool)
+            && !(tool == MCHSkill.回转飞锯 && MachinistRules.ToolReady(s, MCHSkill.掘地飞轮));
+    }
 
     internal static MachinistChoice SelectGcd(MachinistState s, uint reserved = 0, uint held = 0) =>
         s.WindowActive && s.Level == 100 ? MachinistWindowPlanner.Choose(s, false, reserved, held).Choice
@@ -166,26 +191,34 @@ internal static class MachinistProjection
         var elapsed = 0f;
         var heatOverflow = 0;
         var batteryOverflow = 0;
-        var burstBonus = 0f;
         var burstShots = 0;
+        var burstCycles = 0;
+        var heatCycles = 0;
+        var cycleShots = 0;
+        var cycleInBurst = false;
+        var queenBattery = 0;
+        var queenLost = 0;
         var batteryEvents = burstHeat && initial.QueenQt ? new List<MachinistBatteryPlanner.Event>() : null;
         var reached100 = s.Battery == 100 ? 0 : float.PositiveInfinity;
         var wildfireAt = first == MCHSkill.野火 ? 0 : float.PositiveInfinity;
         var (burstStart, burstEnd) = MachinistRules.QueenWindow(initial);
         if (burstAt.HasValue) { burstStart = burstAt.Value; burstEnd = burstStart + 20; }
         var burstBattery = first == MCHSkill.后式自走人偶 ? s.Battery * QueenCoverage(0, burstEnd, burstStart) : 0;
-        void Apply(uint action)
+        void Apply(uint action, bool recoveryWildfire = false)
         {
-            if (burstHeat)
-                burstBonus += MachinistDamage.Action(s, action)
-                    * (MachinistDamage.Multiplier(initial, elapsed + MachinistRules.EffectMargin) - 1);
+            if (action == MCHSkill.超荷) { cycleShots = 0; cycleInBurst = false; }
             if (MachinistModel.BatteryGain(action) is var gain && gain > 0)
                 batteryEvents?.Add(new(elapsed, gain, false));
-            if (MachinistRules.IsHeatShot(action) && elapsed + MachinistRules.EffectMargin >= burstStart
-                && elapsed + MachinistRules.EffectMargin < burstEnd) burstShots++;
-            MachinistModel.Apply(ref s, action);
+            if (MachinistRules.IsHeatShot(action))
+            {
+                if (elapsed + MachinistRules.EffectMargin >= burstStart && elapsed + MachinistRules.EffectMargin < burstEnd)
+                { burstShots++; cycleInBurst = true; }
+                if (++cycleShots == 5) { heatCycles++; if (cycleInBurst) burstCycles++; }
+            }
+            MachinistModel.Apply(ref s, action, recoveryWildfire);
         }
-        if (first != 0) Apply(first);
+        if (first != 0) Apply(first, first == MCHSkill.野火 && MachinistWildfire.TryPlan(s, out var plan, out _)
+            && plan.Route == MachinistWildfireRoute.Recover);
         // 一次预测只保留当前窗口约束；预测结束不读取/修改真实窗口。
         for (var steps = 0; steps < Math.Max(1600, (int)(horizon * 20)) && elapsed < horizon - .001f; steps++)
         {
@@ -229,7 +262,7 @@ internal static class MachinistProjection
                     {
                         if (off.Action == MCHSkill.后式自走人偶) burstBattery += s.Battery * QueenCoverage(elapsed, burstEnd, burstStart);
                         if (off.Action == MCHSkill.野火) wildfireAt = Math.Min(wildfireAt, elapsed);
-                        Apply(off.Action);
+                        Apply(off.Action, off.RecoveryWildfire);
                     }
                     continue;
                 }
@@ -245,10 +278,12 @@ internal static class MachinistProjection
         // 由可用插槽独立分配电量，不把“预测暂不召唤”造成的满电算成实战损失。
         if (batteryEvents != null)
         {
-            var queenBonus = MachinistBatteryPlanner.Allocate(initial, batteryEvents).Value * MachinistQueen.FullPotency / 50;
-            burstBonus += queenBonus;
+            var queen = MachinistBatteryPlanner.Allocate(initial, batteryEvents);
+            queenBattery = queen.BurstBattery;
+            queenLost = queen.Lost;
         }
         return new(s, heatOverflow, batteryOverflow, reached100, burstBattery, wildfireAt)
-        { BurstBonus = burstBonus, BurstShots = burstShots };
+        { BurstShots = burstShots, BurstCycles = burstCycles, HeatCycles = heatCycles,
+            QueenBattery = queenBattery, QueenLost = queenLost, Complete = elapsed >= horizon - .001f };
     }
 }

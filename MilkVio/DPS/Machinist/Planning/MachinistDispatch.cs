@@ -13,14 +13,16 @@ internal sealed class MachinistDispatch
         public readonly MachinistState Before = before;
         public readonly long Cycle = cycle;
         public bool EffectSeen, Applied;
+        public bool Unconfirmed;
         public uint Sequence;
+        public bool RecoveryWildfire;
     }
 
     private readonly List<Receipt> _receipts = new();
     private readonly Queue<(uint Action, uint Sequence)> _seen = new();
     private Receipt? _pending;
     private long _cycle, _pairCycle, _pairUntil, _reserveUntil, _hyperchargeAt;
-    private long _wildfireReadyAt;
+    private long _wildfireReadyAt, _lastWildfireAt, _recoveryHyperchargeAt;
     private ulong _pairTarget;
     private int _pairWindow;
     private long _recastStarted;
@@ -34,12 +36,14 @@ internal sealed class MachinistDispatch
     public int Weaves => _used;
     public bool Pending => _pending != null;
     public uint ReservedTool => _reservedTool;
+    public float HyperchargeRecoveryLeft(long now, float gcd) => _recoveryHyperchargeAt > _lastWildfireAt
+        ? Math.Max(0, MachinistWildfire.RecoveryWindow(gcd) - (now - _recoveryHyperchargeAt) / 1000f) : 0;
 
     public void Reset()
     {
         _receipts.Clear(); _seen.Clear(); _pending = null;
         _cycle = _pairCycle = _pairUntil = _reserveUntil = _hyperchargeAt = 0;
-        _wildfireReadyAt = 0; _pairTarget = 0; _pairWindow = 0;
+        _wildfireReadyAt = _lastWildfireAt = _recoveryHyperchargeAt = 0; _pairTarget = 0; _pairWindow = 0;
         _recastStarted = 0; _recastAction = 0; _recastElapsed = _recastTotal = 0; _recastActive = false;
         _used = 0; _reservedTool = 0; _sawReassemble = _solving = false;
     }
@@ -86,6 +90,7 @@ internal sealed class MachinistDispatch
                 WriteNote?.Invoke(pending.Applied
                     ? $"提交已观察到效果或状态变化：{pending.Action}，本G已占用={_used}"
                     : $"宿主已空闲但未观察到成功：{pending.Action}；结束本地等待，本G插槽仍保留");
+                pending.Unconfirmed = !pending.Applied;
                 _pending = null;
                 if (pending.Action == MCHSkill.整备)
                     _reserveUntil = pending.Applied ? s.Now + StatusGraceMs : 0;
@@ -105,8 +110,10 @@ internal sealed class MachinistDispatch
     {
         if (_seen.Contains((action, sequence))) return;
         _seen.Enqueue((action, sequence)); if (_seen.Count > 64) _seen.Dequeue();
-        var receipt = _receipts.FirstOrDefault(r => !r.EffectSeen && at >= r.Before.Now
-            && (r.Action == action || r.Adjusted == action));
+        bool Matches(Receipt r) => !r.EffectSeen && at >= r.Before.Now && (r.Action == action || r.Adjusted == action);
+        // 旧的未成功提交不能抢走本次重试的效果；没有新提交时仍接受迟到确认。
+        var receipt = _receipts.FirstOrDefault(r => !r.Unconfirmed && Matches(r))
+            ?? _receipts.LastOrDefault(Matches);
         if (receipt != null)
         {
             receipt.EffectSeen = true;
@@ -115,13 +122,22 @@ internal sealed class MachinistDispatch
             receipt.Applied = true;
         }
         else if (_cycle > 0) _used++;
-        if (action == MCHSkill.超荷) _hyperchargeAt = at;
-        if (action == MCHSkill.野火) _pairUntil = 0;
+        if (action == MCHSkill.超荷)
+        {
+            _hyperchargeAt = at;
+            var wildfireIn = receipt?.Before.WildfireCd ?? Math.Max(0, (_wildfireReadyAt - at) / 1000f);
+            // 仅覆盖原本与这轮超荷重叠的野火，不把更早的平峰超荷当成快速开火许可。
+            _recoveryHyperchargeAt = wildfireIn <= 10 + .001f ? at : 0;
+        }
+        if (action == MCHSkill.野火) { _pairUntil = 0; _lastWildfireAt = at; }
     }
 
     // 使用提交时的路线，而非效果到达时的QT；固定起手/手动野火没有快速提交记录。
     public bool WasFastWildfire(uint sequence, ulong target) => _receipts.Any(r => r.Action == MCHSkill.野火
         && r.EffectSeen && r.Sequence == sequence && r.Before.TargetId == target && r.Before.FastBurst);
+
+    public bool WasRecoveryWildfire(uint sequence, ulong target) => _receipts.Any(r => r.Action == MCHSkill.野火
+        && r.EffectSeen && r.Sequence == sequence && r.Before.TargetId == target && r.RecoveryWildfire);
 
     public uint HeldTool(MachinistState s) => s.Reassemble <= 0 && _reservedTool != 0
         && (_pending?.Action == MCHSkill.整备 || s.Now < _reserveUntil) ? _reservedTool : 0;
@@ -181,6 +197,7 @@ internal sealed class MachinistDispatch
         }
         if (action is MCHSkill.超荷 or MCHSkill.野火 && MachinistWildfire.TryPlan(s, out var plan, out _))
         {
+            _pending.RecoveryWildfire = action == MCHSkill.野火 && plan.Route == MachinistWildfireRoute.Recover;
             if (plan.Route == MachinistWildfireRoute.Fast)
             {
                 var preview = MachinistFastBurst.Preview(s);
@@ -188,6 +205,9 @@ internal sealed class MachinistDispatch
                     $"预计{preview.Hits}/6击 热={s.Heat} 免费={s.FreeHypercharge:F2} 超荷QT={s.HyperchargeQt} " +
                     "不足六击不阻止开火，后续按实况重算");
             }
+            else if (plan.Route == MachinistWildfireRoute.Recover)
+                WriteNote?.Invoke($"野火恢复：剩余过热{s.OverheatStacks}层 预计{plan.Hits}/6击 " +
+                    $"冷却={s.WildfireCd:F3}s 预计开火={plan.FireIn:F3}s后，不等待新超荷");
             else WriteNote?.Invoke($"野火安排：{plan.Name} 冷却={s.WildfireCd:F3}s 预计开火={plan.FireIn:F3}s后 " +
                     $"第六击余量={10 - (plan.SixthIn - plan.FireIn):F3}s 工具推迟合计={plan.ToolDelay:F3}s " +
                     $"过热后首G={plan.Recovery}@{plan.RecoveryIn:F3}s 飞轮/全金属预备={s.Excavator:F2}/{s.FullMetal:F2}s");
