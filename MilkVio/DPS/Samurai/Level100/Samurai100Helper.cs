@@ -105,7 +105,8 @@ public static class Samurai100Helper
     {
         var missing = 3 - JobGaugeHelper.SAM.GetSenCount();
         var toThree = GcdsToThreeSen();
-        var immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀);
+        var immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀) &&
+                        !PromeSettings.Instance.GetQt(SAMQt.延迟回返);
         var returns = (immediate ? 1 : 0) + (SamuraiHelper.Has燕回返() ? 1 : 0);
         // 居合和回返也会占用明镜时间。
         var mirrorLeft = Core.Me.GetStatusLeftTime(SAMBuff.明镜止水);
@@ -150,12 +151,18 @@ public static class Samurai100Helper
     {
         if (Samurai100Planning.TryGcd(out var planned, out _))
             return planned == SAMSkill.彼岸花 ? 居合类型.彼岸花 : planned == SAMSkill.纷乱雪月花 ? 居合类型.雪月花 : 居合类型.无;
+        var resourceState = Samurai100Planning.ReadState();
+        var resourceAction = Samurai100Projection.NextBaseGcd(resourceState);
+        if (Samurai100Weave.BeforeCast(Samurai100Projection.AtNextGcd(resourceState), resourceAction, Samurai100Planning.PotionPending) != resourceAction)
+            return 居合类型.无;
         var count = JobGaugeHelper.SAM.GetSenCount();
         var moon = Core.Me.GetStatusLeftTime(SAMBuff.风月);
         var castEnd = HiganbanaTimeAfter(0);
         if (count == 3)
         {
-            if (PromeSettings.Instance.GetQt(SAMQt.强制垫刀) && SamuraiHelper.Has燕回返()) return 居合类型.无;
+            var state = Samurai100Planning.ReadState();
+            if (Samurai100Rules.PaddingGcd(state, out _) ||
+                (state.ForcePadding || state.DelayReturn) && state.ReturnLeft > 0) return 居合类型.无;
             var tendo = Core.Me.GetStatusLeftTime(SAMBuff.天道);
             if (moon > castEnd || (tendo > castEnd && tendo <= HiganbanaTimeAfter(2)))
                 return 居合类型.雪月花;
@@ -178,7 +185,11 @@ public static class Samurai100Helper
         if (Samurai100Planning.TryGcd(out var planned, out _))
             return planned == SAMSkill.晓风 || planned == SAMSkill.阵风 || planned == SAMSkill.士风 ||
                    planned == SAMSkill.雪风 || planned == SAMSkill.月光 || planned == SAMSkill.花车 ? planned : 0;
-        if (Samurai100Rules.ForcedPaddingGcd(Samurai100Planning.ReadState(), out var filler)) return filler;
+        if (Samurai100Rules.PaddingGcd(Samurai100Planning.ReadState(), out var filler)) return filler;
+        var state = Samurai100Planning.ReadState();
+        var next = Samurai100Projection.NextBaseGcd(state);
+        var resourceFiller = Samurai100Weave.BeforeCast(Samurai100Projection.AtNextGcd(state), next, Samurai100Planning.PotionPending);
+        if (resourceFiller != next) return resourceFiller;
         if (MeikyoStacks > 0) return 0;
         var combo = GetComboId();
         var count = JobGaugeHelper.SAM.GetSenCount();
@@ -217,6 +228,8 @@ public static class Samurai100Helper
             return JobGaugeHelper.SAM.HasMoon ? SAMSkill.士风 : SAMSkill.阵风;
         }
 
+        if (Samurai100Projection.LongSenFitsFlower(Samurai100Projection.AtNextGcd(state)))
+            return Samurai100Rules.ChooseMoonFlower(state) == SAMSkill.月光 ? SAMSkill.阵风 : SAMSkill.士风;
         if (!JobGaugeHelper.SAM.HasYuki) return SAMSkill.雪风;
         var finisher = Samurai100Rules.ChooseMoonFlower(Samurai100Planning.ReadState());
         if (finisher == SAMSkill.月光) return SAMSkill.阵风;

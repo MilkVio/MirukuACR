@@ -18,6 +18,7 @@ public class 燕回返Gcd : IDecisionResolver
         if (Core.Me.DistanceToMe() > currentAttackRange) return new CheckResult(false, $"当前目标过远（>{currentAttackRange}m）");
         if (Samurai100Helper.Enabled)
         {
+            if (Core.Target.IsDead || !Core.Target.IsTargetable) return new CheckResult(false, "当前目标不可攻击");
             var use = Samurai100Burst.ShouldUseTsubame(out var reason);
             return new CheckResult(use, reason);
         }

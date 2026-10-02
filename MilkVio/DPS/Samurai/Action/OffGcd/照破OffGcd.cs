@@ -22,6 +22,12 @@ public class 照破OffGcd : IDecisionResolver
         {
             if (Samurai100Helper.Enabled && Samurai100Planning.TryOff(SAMSkill.照破, out var use, out var reason))
                 return new CheckResult(use, reason);
+            if (Samurai100Helper.Enabled)
+            {
+                var s = Samurai100Planning.ReadState();
+                if (!Samurai100Weave.ShohaUrgent(s) && (Samurai100Rules.CanIkishoten(s, out _) || Samurai100Weave.SeneiReady(s)))
+                    return new CheckResult(false, "下刀不溢出剑压，先用意气或闪影");
+            }
             return new CheckResult(true, $"好了就用");
         }
         

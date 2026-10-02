@@ -37,7 +37,6 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
     public IRotationEventHandler GetEventHandler() => _eventHandler;
     
     // 管理该职业所有的决策解析器
-    private readonly List<IDecisionResolver> _alwaysResolvers = new();
     private readonly List<IDecisionResolver> _gcdResolvers = new();
     private readonly List<IDecisionResolver> _offGcdResolvers = new();
     private readonly OpenerSelector _openerSelector = new();
@@ -68,6 +67,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         {SAMData.SAMQt.燕飞, true},
         {SAMData.SAMQt.真北, true},
         {SAMData.SAMQt.立即回返, false},
+        {SAMData.SAMQt.延迟回返, false},
         {SAMData.SAMQt.强制垫刀, false},
     };
     // 起手列表
@@ -94,6 +94,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         _offGcdResolvers.Add(new 真北OffGcd(() => ResolveNextGcd(false)));
         
         // 爆发状态下的GCD
+        _gcdResolvers.Add(new 能力技等待Gcd());
         _gcdResolvers.Add(new 奥义斩浪Gcd());
         _gcdResolvers.Add(new 燕回返Gcd());
         _gcdResolvers.Add(new 居合术Gcd());
@@ -166,10 +167,11 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
     
     public PAction? NextAlways()
     {
-        foreach (var resolver in _alwaysResolvers)
+        var emergency = Samurai100Weave.AlwaysAction(out var reason);
+        if (emergency != null)
         {
-            if (resolver.Check().Success)
-                return resolver.GetAction();
+            RecordSelection(emergency, true, $"紧急强插：{reason}");
+            return emergency;
         }
         return null;
     }
@@ -415,17 +417,14 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         RotationManager.GcdSolverStatus.Clear();
         RotationManager.OffGcdSolverStatus.Clear();
 
-        foreach (var resolver in _alwaysResolvers)
+        var emergency = Samurai100Weave.TryEmergency(out var emergencyId, out var emergencyReason);
+        RotationManager.AlwaysSolverStatus.Add(new SolverStatus
         {
-            var result = resolver.Check();
-
-            RotationManager.AlwaysSolverStatus.Add(new SolverStatus
-            {
-                Name = resolver.GetType().Name,
-                Success = result.Success,
-                Message = result.Message
-            });
-        }
+            Name = "百级资源保护",
+            Success = emergency,
+            Message = emergency ? $"{SamuraiDebugLog.ActionName(emergencyId)}：{emergencyReason}" :
+                string.IsNullOrEmpty(emergencyReason) ? "正常穿插或无需强插" : emergencyReason
+        });
         
         // GCD状态列表
         foreach (var resolver in _gcdResolvers)

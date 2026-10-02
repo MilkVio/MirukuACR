@@ -21,10 +21,16 @@ public static class Samurai100Burst
         reason = "等待奥义预备";
         var left = Core.Me.GetStatusLeftTime(SAMBuff.奥义浪斩预备);
         if (left <= 0) return false;
+        var state = Samurai100Planning.ReadState();
+        if (state.Distance <= state.IaiRange && Samurai100Rules.TryTsubameControl(state, out var useReturn, out var returnReason) && useReturn)
+        { reason = returnReason; return false; }
+        if (Samurai100Weave.BeforeCast(Samurai100Projection.AtNextGcd(Samurai100Planning.ReadState()), SAMSkill.奥义斩浪,
+            Samurai100Planning.PotionPending) != SAMSkill.奥义斩浪)
+        { reason = "先垫刀给照破或到期能力技留位置"; return false; }
         var gcd = Samurai100Helper.GcdSeconds;
         if (left <= Samurai100Helper.HiganbanaTimeAfter(2)) { reason = "奥义预备将到期"; return true; }
         if (Samurai100Helper.WouldDelayHiganbana(2)) { reason = "先安排彼岸花"; return false; }
-        if (SamuraiHelper.Has燕回返() && (PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀) ||
+        if (SamuraiHelper.Has燕回返() && (state.Immediate ||
             SamuraiHelper.燕回返LeftTime() <= Samurai100Helper.GcdRemain + 3 * gcd))
         { reason = "先兑现回返"; return false; }
         var meikyo = Core.Me.GetStatusLeftTime(SAMBuff.明镜止水);
@@ -42,12 +48,8 @@ public static class Samurai100Burst
     {
         reason = "保留回返";
         if (!SamuraiHelper.Has燕回返()) return false;
-        if (PromeSettings.Instance.GetQt(SAMQt.强制垫刀))
-        {
-            var hold = Samurai100Rules.HoldTsubame(Samurai100Planning.ReadState());
-            reason = hold ? "强制垫刀，保留旧回返" : "回返将到期或必须居合，先清旧回返";
-            return !hold;
-        }
+        if (Samurai100Rules.TryTsubameControl(Samurai100Planning.ReadState(), out var controlled, out var controlReason))
+        { reason = controlReason; return controlled; }
         if (PromeSettings.Instance.GetQt(SAMQt.立即回返)) { reason = "立即回返"; return true; }
         if (Samurai100Planning.TryGcd(out var planned, out reason)) return planned == SAMSkill.燕回返;
         var left = SamuraiHelper.燕回返LeftTime();
@@ -57,6 +59,8 @@ public static class Samurai100Burst
         { reason = "新居合前先用旧回返"; return true; }
         if (!Samurai100Rules.ReturnBeforeFlower(Samurai100Planning.ReadState()))
         { reason = "先取闪续花"; return false; }
+        if (Samurai100Rules.FinishingReturn(Samurai100Planning.ReadState()))
+        { reason = "完成本轮刚生成的回返"; return true; }
         if (Core.Me.DistanceToMe() > GameData.GetCurrentMeleeRange())
         { reason = "远离使用回返"; return true; }
         var combo = Samurai100Helper.GetComboId();
@@ -76,21 +80,15 @@ public static class Samurai100Burst
         return false;
     }
 
-    public static bool ShouldUseShohaFirst()
-    {
-        return PromeSettings.Instance.GetQt(SAMQt.照破) && JobGaugeHelper.SAM.剑压 == 3 &&
-               SAMSkill.照破.GetActionCooldown() <= 0 &&
-               Core.Me.DistanceToMe() <= GameData.GetCurrentAttackRange(10) &&
-               (Samurai100Helper.GetBestIaijutsu() != 居合类型.无 ||
-                (SamuraiHelper.AllowOgi && Core.Me.HasStatus(SAMBuff.奥义浪斩预备)));
-    }
-
     public static bool ShouldUseZanshin(out string reason)
     {
         if (Samurai100Planning.TryOff(SAMSkill.残心, out var planned, out reason)) return planned;
         reason = "等待残心";
+        var state = Samurai100Planning.ReadState();
+        if (Samurai100Weave.SeneiReady(state)) { reason = "先使用已就绪的闪影"; return false; }
+        if (!Samurai100Rules.CanZanshin(state)) { reason = "为闪影保留25剑气"; return false; }
         if (Core.Me.DistanceToMe() > GameData.GetCurrentAttackRange(8)) return false;
-        if (ShouldUseShohaFirst()) { reason = "先用照破，防止剑压溢出"; return false; }
+        if (Samurai100Weave.ShohaReady(state)) { reason = "先用照破，防止剑压溢出"; return false; }
         var left = Core.Me.GetStatusLeftTime(SAMBuff.残心预备);
         if (left <= Samurai100Helper.GcdRemain + Samurai100Helper.GcdSeconds)
         { reason = "残心即将到期"; return true; }

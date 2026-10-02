@@ -158,6 +158,17 @@ internal static class Samurai100Planning
         action = _plan!.Gcd; reason = _plan.Summary;
         // 预测会用的明镜、意气尚未成功时，不提前选出无效技能。
         var live = ReadState();
+        if (Samurai100Rules.TryTsubameControl(live, out var useReturn, out var returnReason) &&
+            (action == SAMSkill.燕回返 && useReturn || action == 0)) reason = returnReason;
+        if (Samurai100Rules.PaddingGcd(live, out var filler) && action == filler && filler != 0)
+            reason = $"{(live.ForcePadding ? "强制垫刀" : "延迟回返")}：先打安全前半连，旧回返={live.ReturnLeft:F1}秒";
+        else if (action == SAMSkill.晓风 || action == SAMSkill.阵风 || action == SAMSkill.士风 ||
+                 action == SAMSkill.月光 || action == SAMSkill.花车)
+        {
+            var first = Samurai100Projection.NextBaseGcd(live);
+            if (Samurai100Weave.BeforeCast(Samurai100Projection.AtNextGcd(live), first, _pending) == action && first != action)
+                reason = live.Meditation == 3 ? "先垫一刀穿插照破，避免下次读条溢出剑压" : "先用瞬发刀给意气或闪影留穿插位置";
+        }
         if (action == SAMSkill.雪风 && live.MirrorStacks > 0 && !live.Dump)
             reason = "异常兜底：已有明镜仅缺雪，月花无法继续";
         if (action == SAMSkill.月光 && live.MirrorStacks <= 0 && live.Combo != SAMSkill.阵风) return false;
@@ -221,7 +232,7 @@ internal static class Samurai100Planning
             (a.Party > 0) == (b.Party > 0) &&
             a.UseDot == b.UseDot && a.UseMirror == b.UseMirror && a.UseIki == b.UseIki && a.UseSenei == b.UseSenei &&
             a.UseOgi == b.UseOgi && a.UseZanshin == b.UseZanshin && a.UseShinten == b.UseShinten && a.UseShoha == b.UseShoha &&
-            a.Immediate == b.Immediate && a.Dump == b.Dump && a.ForcePadding == b.ForcePadding &&
+            a.Immediate == b.Immediate && a.Dump == b.Dump && a.ForcePadding == b.ForcePadding && a.DelayReturn == b.DelayReturn &&
             a.MirrorRequested == b.MirrorRequested && a.AutoMirror == b.AutoMirror;
     }
 
@@ -316,8 +327,10 @@ internal static class Samurai100Planning
             AutoMirror = PromeSettings.Instance.GetQt(SAMQt.明镜止水), MirrorRequested = SamuraiTimeline.MirrorPending,
             UseIki = SamuraiHelper.AllowIkishoten, UseSenei = SamuraiHelper.AllowSenei, UseOgi = SamuraiHelper.AllowOgi,
             UseZanshin = SamuraiHelper.AllowZanshin, UseShinten = SamuraiHelper.AllowShinten, UseShoha = PromeSettings.Instance.GetQt(SAMQt.照破),
-            Immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀),
-            ForcePadding = PromeSettings.Instance.GetQt(SAMQt.强制垫刀), Dump = PromeSettings.Instance.GetQt(SAMQt.倾泻资源)
+            Immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀) &&
+                        !PromeSettings.Instance.GetQt(SAMQt.延迟回返),
+            ForcePadding = PromeSettings.Instance.GetQt(SAMQt.强制垫刀), DelayReturn = PromeSettings.Instance.GetQt(SAMQt.延迟回返),
+            Dump = PromeSettings.Instance.GetQt(SAMQt.倾泻资源)
         };
     }
 }

@@ -48,5 +48,7 @@ internal static class SamuraiTimeline
         ClearRequest(reason);
         if (PromeSettings.Instance.GetQt(SAMQt.强制垫刀)) Samurai100Planning.WriteNote?.Invoke($"强制垫刀已关闭：{reason}");
         PromeSettings.Instance.SetQt(SAMQt.强制垫刀, false);
+        if (PromeSettings.Instance.GetQt(SAMQt.延迟回返)) Samurai100Planning.WriteNote?.Invoke($"延迟回返已关闭：{reason}");
+        PromeSettings.Instance.SetQt(SAMQt.延迟回返, false);
     }
 }

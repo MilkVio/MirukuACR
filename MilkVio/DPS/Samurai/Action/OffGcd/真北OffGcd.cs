@@ -23,6 +23,8 @@ public class 真北OffGcd : IDecisionResolver
         if (!PromeSettings.Instance.GetQt(SAMQt.真北)) return new CheckResult(false, "未开启自动真北");
         if (!TargetHelper.HasPositionalRequirement(Core.Target)) return new CheckResult(false, "目标无需身位");
         if (Core.Me.IsCasting) return new CheckResult(false, "当前正在读条");
+        if (Samurai100Helper.Enabled && float.IsFinite(Samurai100Weave.CooldownDelay(Samurai100Planning.ReadState())))
+            return new CheckResult(false, "给即将转好的意气或闪影留位置");
         if (UniversalData.MeleeUniversalSkill.真北.GetActionCharges() < 1) return new CheckResult(false, "真北没有充能");
 
         var action = _nextGcd()?.ActionId ?? 0;

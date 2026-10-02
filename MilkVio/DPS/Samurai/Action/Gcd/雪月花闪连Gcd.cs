@@ -20,7 +20,8 @@ public class 雪月花闪连Gcd : IDecisionResolver
         {
             if (Samurai100Helper.GetComboId() == 0) return new CheckResult(false, "需要重新起连击");
             var action = Samurai100Helper.GetComboAction();
-            return new CheckResult(true, action == 0 ? Samurai100Helper.GetWaitReason() : "续连击或垫刀");
+            var reason = Samurai100Planning.TryGcd(out _, out var plannedReason) ? plannedReason : "续连击或垫刀";
+            return new CheckResult(true, action == 0 ? Samurai100Helper.GetWaitReason() : reason);
         }
         var isCanUse = lastComboId == SamuraiHelper.Get1ComboActionId(false) || lastComboId == SAMSkill.阵风 || lastComboId == SAMSkill.士风;
         
