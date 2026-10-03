@@ -10,14 +10,25 @@ internal static class SamuraiTimeline
 {
     private static uint _player;
     public static bool MirrorPending { get; private set; }
+    public static bool MirrorForced { get; private set; }
     public static string Status { get; private set; } = "没有明镜请求";
 
-    public static void RequestMeikyo(bool waitForCharge)
+    public static void RequestMeikyo(bool waitForCharge, bool force = false)
     {
         Update();
         if (Core.Me == null || Core.Me.ClassJob.RowId != (uint)Job.SAM || Core.Me.Level != 100)
         { Svc.Chat.PrintError("[SAM] 请求一次明镜仅支持百级武士"); return; }
-        if (MirrorPending) { Samurai100Planning.WriteNote?.Invoke("已有一次明镜请求，不重复排入"); return; }
+        if (MirrorPending)
+        {
+            if (force && !MirrorForced)
+            {
+                MirrorForced = true;
+                Status = "已有明镜请求改为允许强插，仍只使用一次";
+                Samurai100Planning.WriteNote?.Invoke(Status);
+            }
+            else Samurai100Planning.WriteNote?.Invoke("已有一次明镜请求，不重复排入");
+            return;
+        }
         if (!waitForCharge && SamuraiHelper.明镜止水层数() < 1)
         {
             Status = "当前无明镜层数 已丢弃";
@@ -25,8 +36,9 @@ internal static class SamuraiTimeline
             Samurai100Planning.WriteNote?.Invoke(Status);
             return;
         }
-        MirrorPending = true; _player = Core.Me.EntityId;
+        MirrorPending = true; MirrorForced = force; _player = Core.Me.EntityId;
         Status = waitForCharge ? "已请求一次明镜，等待充能与合适位置" : "已请求一次明镜，等待合适位置";
+        if (force) Status += "（允许强插）";
         Samurai100Planning.WriteNote?.Invoke(Status);
     }
 
@@ -39,7 +51,7 @@ internal static class SamuraiTimeline
     public static void ClearRequest(string reason)
     {
         if (MirrorPending) Samurai100Planning.WriteNote?.Invoke($"明镜请求结束：{reason}");
-        MirrorPending = false; _player = 0; Status = $"没有明镜请求（{reason}）";
+        MirrorPending = MirrorForced = false; _player = 0; Status = $"没有明镜请求（{reason}）";
     }
 
     // 普通重算、死亡和暂时无目标不取消当前战斗的时间轴控制。

@@ -190,6 +190,8 @@ public static class Samurai100Helper
         var next = Samurai100Projection.NextBaseGcd(state);
         var resourceFiller = Samurai100Weave.BeforeCast(Samurai100Projection.AtNextGcd(state), next, Samurai100Planning.PotionPending);
         if (resourceFiller != next) return resourceFiller;
+        if (next == SAMSkill.雪风 && Samurai100Projection.RequestedPreparation(Samurai100Projection.AtNextGcd(state)) == next)
+            return next;
         if (MeikyoStacks > 0) return 0;
         var combo = GetComboId();
         var count = JobGaugeHelper.SAM.GetSenCount();
@@ -257,7 +259,18 @@ public static class Samurai100Helper
     public static bool ShouldUseMeikyo(out string reason)
     {
         reason = "保留明镜";
-        if (!PromeSettings.Instance.GetQt(SAMQt.明镜止水) && !SamuraiTimeline.MirrorPending)
+        if (SamuraiTimeline.MirrorPending)
+        {
+            var s = Samurai100Planning.ReadState();
+            if (s.Casting) { reason = "明镜请求等待当前读条完成"; return false; }
+            if (ActionHelper.GetAnimationLock() > 0) { reason = "明镜请求等待动作锁结束"; return false; }
+            if (!Samurai100Projection.CanMirror(s, out reason)) return false;
+            if (s.GcdLeft < Samurai100Projection.AbilityLock)
+            { reason = "明镜请求等待正常穿插"; return false; }
+            if (Samurai100Planning.TryOff(SAMSkill.明镜止水, out var requested, out reason)) return requested;
+            return true;
+        }
+        if (!PromeSettings.Instance.GetQt(SAMQt.明镜止水))
         { reason = "未开启明镜QT，也没有一次请求"; return false; }
         var charge = SamuraiHelper.明镜止水层数();
         if (charge < 1 || Core.Me.HasStatus(SAMBuff.明镜止水)) return false;
@@ -281,7 +294,6 @@ public static class Samurai100Helper
         { reason = "明镜取一闪续花"; return true; }
         if (count < 3 && Samurai100Burst.NeedSpaceWithOneWeave())
         { reason = "只有一个插入位，先泄剑气再开镜"; return false; }
-        if (SamuraiTimeline.MirrorPending) { reason = "执行时间轴一次明镜请求"; return true; }
         if (Samurai100Rules.PreferOpeningMirror(Samurai100Planning.ReadState()))
         { reason = "开场先用富余明镜，保留120准备余量"; return true; }
         if (count == 3 && (prepareFlower || PromeSettings.Instance.GetQt(SAMQt.倾泻资源)))

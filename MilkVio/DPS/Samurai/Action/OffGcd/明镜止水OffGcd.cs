@@ -5,6 +5,7 @@ using PromeRotation.Helpers;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
 using MilkVio.DPS.Samurai.Level100;
+using MilkVio.DPS.Samurai.Timeline;
 
 namespace MilkVio.DPS.Samurai.Action.OffGcd;
 
@@ -12,6 +13,12 @@ public class 明镜止水OffGcd : IDecisionResolver
 {
     public CheckResult Check()
     {
+        if (Samurai100Helper.Enabled && SamuraiTimeline.MirrorPending)
+        {
+            if (Core.Me == null || Core.Me.IsDead) return new CheckResult(false, "死亡或角色不可用时保留请求");
+            var requested = Samurai100Helper.ShouldUseMeikyo(out var requestReason);
+            return new CheckResult(requested, requestReason);
+        }
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
         if (Samurai100Helper.Enabled)

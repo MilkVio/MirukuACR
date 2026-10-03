@@ -13,12 +13,17 @@ internal static class MachinistWindowPlanner
         internal float DrillLost { get; init; }
         internal float ToolDelay { get; init; }
         internal int Tools { get; init; }
-        internal int Worst => Math.Max(HeatMissing, BatteryMissing);
+        internal int HeatCycles { get; init; }
+        internal float HyperchargeAt { get; init; }
+        internal float ResourceCost { get; init; }
+        internal float Score => Damage - ResourceCost;
+        internal bool HeatWasteAvoided { get; init; }
         internal int Missing => HeatMissing + BatteryMissing;
     }
     internal readonly record struct Advice(MachinistChoice Choice, Result Result, string Reason);
     // 热：0保留、1围绕120、2尽早；电：0保留、1围绕120、2尽早、3满电。
     private readonly record struct Policy(int Heat, int Queen, bool Resources, bool SawFirst);
+    private readonly record struct Route(MachinistChoice Choice, Result Result, int Priority = 0, int ToolPriority = 0);
     private static readonly Policy[] Policies = MakePolicies();
     private static readonly Policy[] SpendPolicies = Policies.Where(p => !p.Resources).ToArray();
     private static Policy[] PoliciesFor(MachinistState s) => s.GoalHeat == 0 && s.GoalBattery == 0 ? SpendPolicies : Policies;
@@ -73,85 +78,85 @@ internal static class MachinistWindowPlanner
                 candidates.RemoveAll(c => c.Action != MCHSkill.回转飞锯);
         }
 
-        Advice best = default;
-        var found = false;
-        var bestPriority = 0;
-        var bestToolPriority = 0;
+        var routes = new List<Route>();
         var follow = off && initial.FastWildfireActive ? MachinistRules.Off(initial, false, false) : default;
         var followAction = follow.Action is MCHSkill.超荷 or MCHSkill.枪管加热 ? follow.Action : 0;
         var fastGcd = !off && (s.FastWildfireActive || s.FastBurst && s.WildfireQt && s.WildfireLeft <= 0
             && s.WildfireCd < s.Gcd - MachinistWildfire.SubmitTail(s)
             && s.WindowLeft >= Math.Max(s.WildfireCd, s.WeaveLock) + 10 + MachinistRules.EffectMargin);
         var normalTool = !off && ToolsDue(s) ? Gcd(s, reserved, held).Action : 0;
-        // 本窗口能结算的野火按最早可行时点安排，期末双资源可达性优先于这条偏好。
-        var punctual = Punctual(initial);
+        // 资源交付不能推迟本窗口能结算的野火。
         foreach (var candidate in candidates)
         {
             var result = Project(initial, candidate, off);
             if (!result.Complete) continue;
-            // 资源缺口与最早野火时点仍在前；快速路线再争取本轮命中和已可衔接的超荷。
             var priority = fastGcd ? MachinistFastBurst.AfterGcd(initial, candidate.Action).Hits
                 : followAction != 0 && candidate.Action == followAction ? 1 : 0;
             var toolPriority = normalTool != 0 && candidate.Action == normalTool ? 1 : 0;
-            if (!found || Better(result, best.Result, punctual, priority - bestPriority, protectDrill: !off,
-                toolPriority: toolPriority - bestToolPriority))
-            {
-                best = new(candidate, result, "");
-                bestPriority = priority;
-                bestToolPriority = toolPriority;
-                found = true;
-            }
+            routes.Add(new(candidate, result, priority, toolPriority));
         }
-        if (!found) return new(new(0, "窗口预测未完成"), default, "窗口预测未完成，等待重算");
+        if (routes.Count == 0) return new(new(0, "窗口预测未完成"), default, "窗口预测未完成，等待重算");
+        var best = Select(routes, initial, off);
         var r = best.Result;
-        var deadline = initial.ReserveEarly ? initial.ReserveLeft : initial.WindowLeft;
-        var target = r.Terminal || deadline <= Lookahead
-            ? r.Missing > 0 ? $"目标暂不可达：缺热{r.HeatMissing}/电{r.BatteryMissing}"
+        var target = r.Terminal
+            ? r.Missing > 0 ? $"尽力交付：预计留热{r.End.Heat}/电{r.End.Battery}，缺热{r.HeatMissing}/电{r.BatteryMissing}"
                 : $"双资源达标，预计留热{r.End.Heat}/电{r.End.Battery}"
-            : $"滚动前瞻{Lookahead:F0}s，资源交付还有{deadline:F1}s";
-        var reason = $"窗口收益比较：{target}；预计工具{r.Tools}次、威力{r.Damage:F0}，溢热{r.HeatLost}/电{r.BatteryLost}，钻头满层损失{r.DrillLost:F2}s；{best.Choice.Reason}";
-        return best with { Reason = reason, Choice = best.Choice with { Reason = reason } };
+            : $"滚动前瞻{Lookahead:F0}s，资源交付还有{initial.WindowLeft:F1}s";
+        var heatAt = float.IsFinite(r.HyperchargeAt) ? $"{r.HyperchargeAt:F2}s" : "无";
+        var guard = r.HeatWasteAvoided ? "，已排除为交付少打一轮且多溢50热的路线" : "";
+        var reason = $"窗口收益比较：{target}；预计工具{r.Tools}次、威力{r.Damage:F0}，资源代价{r.ResourceCost:F0}，净评分{r.Score:F0}；过热{r.HeatCycles}组，下一超荷{heatAt}，溢热{r.HeatLost}/电{r.BatteryLost}，钻头满层损失{r.DrillLost:F2}s{guard}；{best.Choice.Reason}";
+        return new(best.Choice with { Reason = reason }, r, reason);
     }
 
     internal static Result Project(MachinistState initial, MachinistChoice first, bool off)
     {
-        Result best = default;
-        var found = false;
-        var bestPriority = 0;
+        var routes = new List<Route>();
         foreach (var policy in PoliciesFor(initial))
         {
             var result = Run(initial, first, off, policy);
-            var punctual = Punctual(initial);
             var priority = policy.SawFirst ? 0 : 1;
-            if (result.Complete && (!found || Better(result, best, punctual, protectDrill: !off, toolPriority: priority - bestPriority)))
-            { best = result; bestPriority = priority; found = true; }
+            if (result.Complete) routes.Add(new(first, result, ToolPriority: priority));
         }
-        return best;
+        return routes.Count == 0 ? default : Select(routes, initial, off).Result;
     }
 
-    private static bool Better(Result a, Result b, bool punctual, int priority = 0, bool protectDrill = false, int toolPriority = 0)
+    private static Route Select(List<Route> routes, MachinistState initial, bool off)
     {
+        // 先在整组候选中筛硬约束，再比较收益。不能把“多溢50热”写成两两比较：
+        // 该关系不传递，会令最终动作随候选枚举顺序改变。
+        void KeepMin(Func<Route, float> value, float tolerance = 0)
+        {
+            var min = routes.Min(value);
+            routes.RemoveAll(r => value(r) > min + tolerance);
+        }
         // GCD能在超荷前消除满层损失时必须先处理，不能拿期末量谱覆盖它。
         // oGCD决定时当前G已经交出，不能再为修正那一G反复延后野火。
-        if (protectDrill && Math.Abs(a.DrillLost - b.DrillLost) > .05f) return a.DrillLost < b.DrillLost;
-        if (a.Worst != b.Worst) return a.Worst < b.Worst;
-        if (a.Missing != b.Missing) return a.Missing < b.Missing;
-        if (a.EndMissing != b.EndMissing) return a.EndMissing < b.EndMissing;
-        if (punctual && Math.Abs(a.WildfireAt - b.WildfireAt) > .05f) return a.WildfireAt < b.WildfireAt;
-        if (priority != 0) return priority > 0;
-        if (!protectDrill && Math.Abs(a.DrillLost - b.DrillLost) > .05f) return a.DrillLost < b.DrillLost;
-        // 先保住窗口内实际兑现的工具次数。次数相同则沿用稳定顺序，
-        // 不为远端资源评分的小差异反复重排三大件。
-        if (a.Tools != b.Tools) return a.Tools > b.Tools;
-        if (toolPriority != 0) return toolPriority > 0;
-        if (Math.Abs(a.Damage - b.Damage) > .5f) return a.Damage > b.Damage;
-        if (a.HeatLost + a.BatteryLost != b.HeatLost + b.BatteryLost)
-            return a.HeatLost + a.BatteryLost < b.HeatLost + b.BatteryLost;
-        return a.ToolDelay < b.ToolDelay - .05f;
+        if (!off) KeepMin(r => r.Result.DrillLost, .05f);
+        if (Punctual(initial)) KeepMin(r => r.Result.WildfireAt, .05f);
+        KeepMin(r => -r.Priority);
+        if (off) KeepMin(r => r.Result.DrillLost, .05f);
+        // 保留现有的工具兑现次数和稳定顺序保护，资源目标不能再排在它们前面。
+        KeepMin(r => -r.Result.Tools);
+        KeepMin(r => -r.ToolPriority);
+        var avoided = false;
+        if (initial.GoalHeat > 0 || initial.GoalBattery > 0)
+        {
+            var safe = routes.ToArray();
+            avoided = routes.RemoveAll(a => a.Result.Terminal && safe.Any(b =>
+                b.Result.Tools >= a.Result.Tools && b.Result.HeatCycles > a.Result.HeatCycles
+                && a.Result.HeatLost >= b.Result.HeatLost + 50
+                && b.Result.Damage > a.Result.Damage + .5f)) > 0;
+        }
+        KeepMin(r => -r.Result.Score, .5f);
+        KeepMin(r => r.Result.ResourceCost, .5f);
+        KeepMin(r => r.Result.HeatLost + r.Result.BatteryLost);
+        KeepMin(r => r.Result.ToolDelay, .05f);
+        var best = routes[0];
+        return best with { Result = best.Result with { HeatWasteAvoided = best.Result.HeatWasteAvoided || avoided } };
     }
 
     // 不能等野火已经转好才保护时点；前几G的超荷或机器人也可能推迟它。
-    // 资源交付缺口仍排在前面，无法在窗口结算的野火不占用这个优先级。
+    // 无法在窗口结算的野火不占用这个优先级。
     private static bool Punctual(MachinistState s) => s.WildfireQt
         && s.WildfireCd + 10 + MachinistRules.EffectMargin <= Math.Min(Lookahead, s.WindowLeft);
 
@@ -199,7 +204,7 @@ internal static class MachinistWindowPlanner
         // 预测与当前选招使用同一硬约束，不能靠后续压工具虚报资源可达。
         if (ToolsDue(s) || !policy.Resources || s.Heated || s.Reassemble > 0 || s.SawFirst
             || s.WildfireLeft > 0 && s.WildfireLead && !s.LeadGcdDone) return normal;
-        var left = s.ReserveEarly ? s.ReserveLeft : s.WindowLeft;
+        var left = s.WindowLeft;
         // 保留候选按缺口估计补资源所需G数。只在最后15秒才开始、或只允许已到第三段的
         // 连击产电，会漏掉本可提前续连击的见证（D3交付点前差10电）。普通路线仍参与比较。
         var heatGcds = Math.Max(0, (s.GoalHeat - s.Heat + 4) / 5);
@@ -224,7 +229,7 @@ internal static class MachinistWindowPlanner
 
     private static MachinistChoice NextOff(MachinistState s, Policy policy)
     {
-        // 普通野火的完整路线必须兑现；快速野火允许在资源保留优先时放弃超荷。
+        // 普通野火的完整路线必须兑现；快速野火由各条合法候选比较收益。
         if (!s.FastWildfireActive && !s.WildfireRecovery && s.WildfireLeft > 0 && s.HyperchargeQt && s.CanHypercharge && (!s.WildfireLead || s.LeadGcdDone))
             return MachinistRules.Off(s, false, false, true, windowHeat: true);
         // 保留一条不新增资源Buff的可行见证。枪管新增全金属同样会占用产量谱的GCD。
@@ -268,13 +273,15 @@ internal static class MachinistWindowPlanner
         // 后窗口只比较眼前可兑现的动作，不假定容错时间必定可以输出。
         var horizon = Math.Min(Lookahead, initial.WindowLeft > 0 ? initial.WindowLeft : Math.Min(initial.WindowLimit, Math.Max(2, initial.Gcd)));
         var terminal = initial.WindowActive && initial.WindowLeft <= Lookahead;
-        var reserveAt = initial.ReserveEarly ? initial.ReserveLeft : initial.WindowLeft;
+        var reserveAt = initial.WindowLeft;
         var checkReserve = reserveAt <= horizon + .001f;
         var time = 0f;
         var damage = 0f;
         var drillLost = 0f;
         var toolDelay = 0f;
         var tools = 0;
+        var heatCycles = 0;
+        var hyperchargeAt = float.PositiveInfinity;
         uint reserved = 0;
         var heatLost = 0; var batteryLost = 0; var heatMissing = 0; var batteryMissing = 0;
         var wildfireAt = float.PositiveInfinity;
@@ -303,6 +310,7 @@ internal static class MachinistWindowPlanner
         }
         void Apply(uint action, uint tool = 0, bool recoveryWildfire = false)
         {
+            if (action == MCHSkill.超荷) hyperchargeAt = Math.Min(hyperchargeAt, time);
             // 资源随GCD效果到达，不能把交付点之后才生效的收入提前借进来。
             if (checkReserve && time < reserveAt && time + MachinistRules.EffectMargin > reserveAt
                 && MachinistRules.IsWeaponskill(action))
@@ -321,6 +329,7 @@ internal static class MachinistWindowPlanner
             {
                 damage += MachinistDamage.Action(s, action) * MachinistDamage.Multiplier(initial, time);
                 if (MachinistRules.IsTool(action)) tools++;
+                if (MachinistRules.IsHeatShot(action) && s.OverheatStacks == 1) heatCycles++;
             }
             heatLost += Math.Max(0, s.Heat + MachinistModel.HeatGain(action) - 100);
             batteryLost += Math.Max(0, s.Battery + MachinistModel.BatteryGain(action) - 100);
@@ -367,7 +376,28 @@ internal static class MachinistWindowPlanner
         // 滚动前瞻不是阶段末尾，剩余量谱及已召机器人仍有后续价值。
         if (!terminal) damage += s.Battery * MachinistQueen.FullPotency / 50 + s.Heat * 12;
         var endMissing = checkReserve ? Math.Max(0, initial.GoalHeat - s.Heat) + Math.Max(0, initial.GoalBattery - s.Battery) : 0;
+        var resourceCost = batteryMissing * MachinistQueen.FullPotency / 50
+            + HeatCost(initial, heatMissing);
         return new(s, damage, heatLost, batteryLost, heatMissing, batteryMissing, endMissing, wildfireAt,
-            time >= horizon - .001f && steps < 10000, terminal) { DrillLost = drillLost, ToolDelay = toolDelay, Tools = tools };
+            time >= horizon - .001f && steps < 10000, terminal)
+        { DrillLost = drillLost, ToolDelay = toolDelay, Tools = tools, HeatCycles = heatCycles,
+            HyperchargeAt = hyperchargeAt, ResourceCost = resourceCost };
+    }
+
+    private static float HeatCost(MachinistState initial, int missing)
+    {
+        if (missing <= 0) return 0;
+        var s = initial with { Reassemble = 0, ComboLeft = 30 };
+        var aoe = s.HeatAction == MCHSkill.自动弩;
+        var filler = aoe ? MachinistDamage.Action(s, MCHSkill.霰弹枪)
+            : (MachinistDamage.Action(s, MCHSkill.热分裂弹1)
+                + MachinistDamage.Action(s with { Combo = MCHSkill.热分裂弹1 }, MCHSkill.热独头弹2)
+                + MachinistDamage.Action(s with { Combo = MCHSkill.热独头弹2 }, MCHSkill.热狙击弹3)) / 3;
+        var refunds = aoe ? 0 : 2.5f * (MachinistDamage.Action(s, MCHSkill.双将) + MachinistDamage.Action(s, MCHSkill.将死));
+        // 每50热按五发过热+返还能技，减去7.5秒普通填充的净威力估值。
+        // 50热门槛失守至少计一组，其余缺口按比例；代价有限，允许为更高窗口收益让步。
+        var cycle = Math.Max(0, 5 * MachinistDamage.Action(s, s.HeatAction) + refunds - 7.5f / Math.Max(1, s.Gcd) * filler);
+        var lostCycles = initial.GoalHeat / 50 - Math.Max(0, initial.GoalHeat - missing) / 50;
+        return cycle * Math.Max(missing / 50f, lostCycles);
     }
 }

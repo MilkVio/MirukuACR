@@ -151,9 +151,9 @@ public sealed class MachinistOutputWindow
                 WindowLimit = Math.Max(0, (_limit - now) / 1000f),
                 GoalHeat = _settings.KeepResources ? _settings.Heat : 0,
                 GoalBattery = _settings.KeepResources ? _settings.Battery : 0,
-                // 事件在检测区内随时可能结束：资源提前交付，之后保持到实际结束。
-                ReserveEarly = _settings.KeepResources && (_settings.EndOnEvent || _settings.EndWithoutEnemies),
-                ReserveLeft = Math.Max(0, (_detect - now) / 1000f),
+                // Before只控制结束信号的接收；资源按预计结束时点尽力交付。
+                ReserveEarly = false,
+                ReserveLeft = Math.Max(0, (_expected - now) / 1000f),
                 DumpQt = false
             };
         }
@@ -197,13 +197,11 @@ public sealed class MachinistOutputWindow
             if (_settings == null) return LastReason;
             var source = _source == null ? "手动模拟" : "时间轴";
             var mode = _settings.EndOnEvent ? _settings.Event.ToString() : _settings.EndWithoutEnemies ? "无可攻击敌人" : "到时结束";
-            var reserve = _settings.KeepResources ? $"留热{_settings.Heat}/电{_settings.Battery}" : "不设期末资源";
+            var reserve = _settings.KeepResources ? $"期末尽力留热{_settings.Heat}/电{_settings.Battery}" : "不设期末资源";
             var timing = _settings.EndOnEvent || _settings.EndWithoutEnemies
                 ? $"｜{(now < _detect ? $"{(_detect - now) / 1000f:F1}s后开始检测" : "检测中")}｜最晚 {Math.Max(0, (_limit - now) / 1000f):F1}s"
                 : "";
-            var delivery = _settings.KeepResources && (_settings.EndOnEvent || _settings.EndWithoutEnemies)
-                ? $"｜资源交付 {Math.Max(0, (_detect - now) / 1000f):F1}s，随后保持" : "";
-            return $"{source}｜窗口剩余 {Math.Max(0, (_expected - now) / 1000f):F1}s｜{reserve}{delivery}\n结束：{mode}{timing}";
+            return $"{source}｜窗口剩余 {Math.Max(0, (_expected - now) / 1000f):F1}s｜{reserve}\n结束：{mode}{timing}";
         }
     }
 

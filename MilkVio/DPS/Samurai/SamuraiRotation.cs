@@ -508,6 +508,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         ImGui.SameLine();
         if (ImGui.Button("请求一次明镜")) SamuraiTimeline.RequestMeikyo(false);
         ImGui.Text($"当前明镜请求层数：{(SamuraiTimeline.MirrorPending ? 1 : 0)}");
+        if (SamuraiTimeline.MirrorPending) ImGui.TextUnformatted(SamuraiTimeline.Status);
         if (DebugLog.Enabled) ImGui.TextUnformatted(DebugLog.FilePath.Length == 0 ? "已开启，等待开战" : "SAM日志记录中");
         if (DebugLog.FilePath.Length > 0) ImGui.TextUnformatted(DebugLog.FilePath);
         if (DebugLog.Error.Length > 0) ImGui.TextUnformatted(DebugLog.Error);

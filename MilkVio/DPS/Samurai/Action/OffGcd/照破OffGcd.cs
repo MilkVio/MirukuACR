@@ -25,6 +25,7 @@ public class 照破OffGcd : IDecisionResolver
             if (Samurai100Helper.Enabled)
             {
                 var s = Samurai100Planning.ReadState();
+                if (!Samurai100Weave.ShouldShoha(s)) return new CheckResult(false, "强制垫刀：保留剑压，尚未接近溢出");
                 if (!Samurai100Weave.ShohaUrgent(s) && (Samurai100Rules.CanIkishoten(s, out _) || Samurai100Weave.SeneiReady(s)))
                     return new CheckResult(false, "下刀不溢出剑压，先用意气或闪影");
             }

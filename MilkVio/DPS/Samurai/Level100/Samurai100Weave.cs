@@ -12,7 +12,7 @@ internal static class Samurai100Weave
     public static float CastTime(Samurai100State s, uint action) =>
         action == SAMSkill.彼岸花 || action == SAMSkill.纷乱雪月花 ? s.Cast : action == SAMSkill.奥义斩浪 ? s.OgiCast : 0;
 
-    public static bool ShohaReady(Samurai100State s) => s.UseShoha && s.Meditation == 3 &&
+    public static bool ShohaReady(Samurai100State s) => !s.TargetUnavailable && s.UseShoha && s.Meditation == 3 &&
         s.ShohaCd <= 0 && s.Distance <= s.ShohaRange;
 
     public static bool SeneiReady(Samurai100State s) => s.UseSenei && s.SeneiCd <= 0 &&
@@ -51,6 +51,9 @@ internal static class Samurai100Weave
     public static bool ShohaUrgent(Samurai100State s) => ShohaReady(s) &&
         CastTime(s, Samurai100Projection.NextResourceGcd(s)) > 0;
 
+    public static bool ShouldShoha(Samurai100State s) => ShohaReady(s) &&
+        (!s.ForcePadding || ShohaUrgent(s) || Samurai100Projection.ShohaCooldownRisk(s));
+
     // 留出即将转好的能力技位置，不用震天、真北把它占掉。
     public static float CooldownDelay(Samurai100State s)
     {
@@ -58,6 +61,7 @@ internal static class Samurai100Weave
         if (IkiWindow(s) && s.IkiCd > 0) delay = s.IkiCd;
         if (s.UseSenei && s.SeneiCd > 0 && s.Kenki >= 25 && s.Moon > 0 && s.Distance <= s.MeleeRange)
             delay = Math.Min(delay, s.SeneiCd);
+        delay = Math.Min(delay, Samurai100Projection.RequestedMirrorDelay(s));
         return delay < Samurai100Projection.AbilityLock &&
             delay + Samurai100Projection.AbilityLock <= s.GcdLeft ? delay : float.PositiveInfinity;
     }
@@ -69,6 +73,7 @@ internal static class Samurai100Weave
         if (Samurai100Rules.CanIkishoten(ready, out _)) delay = s.IkiCd;
         if (s.UseSenei && s.Kenki >= 25 && s.Moon > s.SeneiCd && s.Distance <= s.MeleeRange)
             delay = Math.Min(delay, s.SeneiCd);
+        if (s.MirrorForced) delay = Math.Min(delay, Samurai100Projection.RequestedMirrorDelay(s, true));
         return delay;
     }
 
@@ -76,11 +81,15 @@ internal static class Samurai100Weave
     {
         if (s.Casting || s.GcdLeft >= Samurai100Projection.AbilityLock) return 0;
         var cast = CastTime(s, next) > 0;
-        if (cast && ShohaReady(s)) return SAMSkill.照破;
+        if (!s.TargetUnavailable && cast && ShohaReady(s)) return SAMSkill.照破;
+        var forceMirror = s.MirrorRequested && s.MirrorForced && Samurai100Projection.CanMirror(s);
         // 当前GCD末尾已放不下正常穿插，不能每轮都等到下一刀。
-        if (beforePotion || !cast && next != 0 && !tail && s.GcdLeft <= 0) return 0;
-        if (Samurai100Rules.CanIkishoten(s, out _)) return SAMSkill.意气冲天;
-        if (SeneiReady(s)) return SAMSkill.必杀剑_闪影;
+        if (!s.TargetUnavailable && !beforePotion && (cast || next == 0 || tail || s.GcdLeft > 0 || forceMirror))
+        {
+            if (Samurai100Rules.CanIkishoten(s, out _)) return SAMSkill.意气冲天;
+            if (SeneiReady(s)) return SAMSkill.必杀剑_闪影;
+        }
+        if (forceMirror) return SAMSkill.明镜止水;
         return 0;
     }
 
@@ -88,17 +97,18 @@ internal static class Samurai100Weave
     {
         action = 0; reason = "";
         if (!Samurai100Helper.Enabled || !GameData.IsInCombat() || Core.Me == null ||
-            Core.Me.IsDead || Core.Me.IsCasting || Core.Target == null || Core.Target.IsDead || !Core.Target.IsTargetable ||
-            Core.Target.EntityId == Core.Me.EntityId || PromeSettings.Instance.EnableAcr != AcrState.On ||
+            Core.Me.IsDead || Core.Me.IsCasting || PromeSettings.Instance.EnableAcr != AcrState.On ||
             ActionQueueManager.HasHighPriorityAction()) return false;
         var s = Samurai100Planning.ReadState();
+        if (s.TargetUnavailable && !(s.MirrorRequested && s.MirrorForced)) return false;
         if (s.GcdLeft >= Samurai100Projection.AbilityLock) return false;
-        var next = Samurai100Planning.TryGcd(out var planned, out _) ? planned : Samurai100Projection.NextResourceGcd(s);
+        var next = s.TargetUnavailable ? 0 : Samurai100Planning.TryGcd(out var planned, out _) ? planned : Samurai100Projection.NextResourceGcd(s);
         var tail = s.GcdLeft > 0;
         if (nextGcd) s = Samurai100Projection.AtNextGcd(s);
         action = Emergency(s, next, Samurai100Planning.PotionPending, tail);
         if (action == 0) return false;
         reason = action == SAMSkill.照破 ? "满剑压且不能安全垫刀，先照破再读条" :
+            action == SAMSkill.明镜止水 ? "强制请求允许卡GCD，当前资源可用月花接完" :
             $"{SamuraiDebugLog.ActionName(action)}已就绪，当前无正常穿插位";
         return true;
     }
@@ -110,10 +120,11 @@ internal static class Samurai100Weave
             !TryEmergency(out var id, out reason)) return null;
         var currentTarget = Core.Target;
         var currentPlayer = Core.Me;
-        if (currentTarget == null || currentPlayer == null) return null;
-        var action = new PAction(id, ActionType.Always, id == SAMSkill.意气冲天 ? ActionTargetType.Self : ActionTargetType.Target);
+        var self = id == SAMSkill.意气冲天 || id == SAMSkill.明镜止水;
+        if (currentPlayer == null || !self && currentTarget == null) return null;
+        var action = new PAction(id, ActionType.Always, self ? ActionTargetType.Self : ActionTargetType.Target);
         // PVE没有派发复查：固定目标，单次尝试，失败后按实际状态重算。
-        action.NetworkTid = id == SAMSkill.意气冲天 ? currentPlayer.EntityId : currentTarget.EntityId;
+        action.NetworkTid = self ? currentPlayer.EntityId : currentTarget!.EntityId;
         return action;
     }
 }

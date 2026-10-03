@@ -18,7 +18,7 @@ internal record struct Samurai100State
     public bool ReturnTendo, OgiReturn, Moving, Casting;
     public bool UseDot, UseMirror, UseIki, UseSenei, UseOgi, UseZanshin, UseShinten, UseShoha, Immediate, Dump;
     public bool ReturnIsOld;
-    public bool ForcePadding, DelayReturn, MirrorRequested, AutoMirror;
+    public bool ForcePadding, DelayReturn, MirrorRequested, MirrorForced, AutoMirror, TargetUnavailable;
     public float Time;
     // 仅本次推算使用，不保存到战斗状态。
     public float FlowerDelay, DotValue;
@@ -296,6 +296,8 @@ internal static class Samurai100Projection
             if (ogi && flowerSafe && (order & 1) != 0 && s.Tendo <= 0) return SAMSkill.奥义斩浪;
             return SAMSkill.纷乱雪月花;
         }
+        var requested = RequestedPreparation(s);
+        if (requested != 0) return requested;
         var mirrorSafe = s.MirrorStacks == 0 || s.MirrorLeft > (s.MirrorStacks + 2) * s.Gcd + Margin;
         if (canReturn && !beforePotion && returnSafe && mirrorSafe &&
             (Samurai100Rules.Spending(s) || Samurai100Rules.FinishingReturn(s) || s.Potion > Margin || s.Party > Margin || s.Dump)) return SAMSkill.燕回返;
@@ -422,22 +424,63 @@ internal static class Samurai100Projection
         return float.PositiveInfinity;
     }
 
-    internal static bool CanMirror(Samurai100State s)
+    // 只为明确请求准备雪连，不锁定后续序列。
+    internal static uint RequestedPreparation(Samurai100State s)
     {
-        if (s.MirrorRequested) s.Dump = false;
-        if (!s.UseMirror || s.MirrorCharges < 1 || s.MirrorStacks > 0 || s.Tendo > 0 || Combo(s) != 0 || s.Distance > s.MeleeRange) return false;
+        if (!s.MirrorRequested || !s.UseMirror || s.MirrorStacks > 0 || s.Tendo > 0 ||
+            Combo(s) != SAMSkill.晓风 || (s.Sen & 1) != 0 || s.Distance > s.MeleeRange) return 0;
+        var weaveAt = Math.Max(AbilityLock, (1 - s.MirrorCharges) * 55);
+        if (weaveAt + AbilityLock + Margin > s.Gcd) return 0;
+        if (s.Moon > 0 && s.Moon <= weaveAt + Margin || s.Flower > 0 && s.Flower <= weaveAt + Margin) return 0;
+        var check = new Samurai100Forecast();
+        ApplyGcd(ref s, SAMSkill.雪风, check, false, false, s.Time + Margin);
+        Advance(ref s, weaveAt, check);
+        return CanMirror(s, out _, true) ? SAMSkill.雪风 : 0;
+    }
+
+    internal static bool CanMirror(Samurai100State s) => CanMirror(s, out _);
+
+    internal static float RequestedMirrorDelay(Samurai100State s, bool allowClip = false)
+    {
+        if (!s.MirrorRequested || s.MirrorCharges >= 1) return float.PositiveInfinity;
+        var delay = (1 - s.MirrorCharges) * 55;
+        if (delay + (allowClip ? 0 : AbilityLock) > s.GcdLeft) return float.PositiveInfinity;
+        Advance(ref s, delay, new Samurai100Forecast());
+        s.MirrorCharges = Math.Max(1, s.MirrorCharges);
+        return CanMirror(s) ? delay : float.PositiveInfinity;
+    }
+
+    internal static bool CanMirror(Samurai100State s, out string reason, bool preserveBuffs = false)
+    {
+        reason = "三层明镜无法用月花正常衔接，先调整资源";
+        if (!s.UseMirror) { reason = "未开启明镜QT，也没有一次请求"; return false; }
+        if (s.MirrorCharges < 1) { reason = "明镜请求等待充能"; return false; }
+        if (s.MirrorStacks > 0) { reason = "先用完已有明镜"; return false; }
+        if (s.Tendo > 0) { reason = "先兑现已有天道"; return false; }
+        if (Combo(s) != 0) { reason = "先收原连击，再执行明镜请求"; return false; }
+        if (s.MirrorRequested)
+        {
+            s.Dump = false;
+            s.Distance = 0;
+            // 无目标时，不能把未知彼岸花当成需要立刻续花。
+            if (s.TargetUnavailable) s.UseDot = false;
+        }
+        else if (s.Distance > s.MeleeRange || s.TargetUnavailable) return false;
+        s.MirrorRequested = s.MirrorForced = false;
         // 检查资源能否衔接，不把当前移动当成后续一直不能读条。
         s.Moving = false;
-        if (KeepSen(s)) return false;
+        if (KeepSen(s)) { reason = "先用已有一闪续花"; return false; }
         if (!s.Dump && (s.Sen & 1) == 0 && !(s.SenCount == 0 && s.UseDot && s.Dot <= 2 * s.Gcd + s.Cast)) return false;
         s.MirrorStacks = 3; s.MirrorLeft = 20; s.Tendo = 30;
         var check = new Samurai100Forecast();
+        var moon = s.Moon > 0; var flower = s.Flower > 0;
         Advance(ref s, s.GcdLeft, check);
         // 三层之后接好居合；近期要续花时也检查，不能留下死角。
         var needsFlower = s.UseDot && s.Dot <= 30;
         s.UseMirror = false;
         for (var step = 0; step < 40; step++)
         {
+            if (preserveBuffs && (moon && s.Moon <= Margin || flower && s.Flower <= Margin)) return false;
             var action = ChooseGcd(s, 0, false, false);
             if (action == 0 || action == SAMSkill.雪风 && s.MirrorStacks > 0 && !s.Dump) return false;
             if (action == SAMSkill.彼岸花)
@@ -447,7 +490,8 @@ internal static class Samurai100Projection
             }
             ApplyGcd(ref s, action, check, false, false, s.Time + s.Cast + Margin);
             if (s.MirrorStacks == 0 && !needsFlower &&
-                (action == SAMSkill.彼岸花 || action == SAMSkill.纷乱雪月花)) return true;
+                (action == SAMSkill.彼岸花 || action == SAMSkill.纷乱雪月花))
+            { reason = "资源可衔接，执行一次明镜请求"; return true; }
             if (s.MirrorStacks > 0 && s.MirrorLeft <= s.Gcd + Margin) return false;
             Advance(ref s, s.Gcd, check);
         }
@@ -473,6 +517,41 @@ internal static class Samurai100Projection
         return s;
     }
 
+    // 再留到下一处穿插，会不会让下一发照破转不回来。
+    internal static bool ShohaCooldownRisk(Samurai100State s)
+    {
+        if (s.Moving || s.Distance > s.IaiRange) return false;
+        var first = NextResourceGcd(s);
+        if (first == 0) return false;
+        var check = new Samurai100Forecast();
+        var next = s.Time + s.GcdLeft;
+        var deadline = next + 15 + 2 * AbilityLock;
+        var gains = 0;
+        // 后续只统计产压，不能递归选择照破。
+        s.UseShoha = false; s.Meditation = 0;
+        for (var step = 0; step < 20; step++)
+        {
+            Advance(ref s, Math.Max(0, next - s.Time), check);
+            if (s.Time >= deadline) return false;
+            var action = step == 0 ? first : ChooseGcd(s, s.Projecting ? s.Order : 0, false, false);
+            if (action == 0) return false;
+            var cast = Samurai100Weave.CastTime(s, action);
+            if (cast > 0 && ++gains == 4) return true;
+            ApplyGcd(ref s, action, check, false, false, s.Time + cast + Margin);
+            next = s.Time + s.Gcd;
+            Advance(ref s, cast > 0 ? cast + Margin : AbilityLock, check);
+            if (step == 0) deadline = s.Time + 15 + AbilityLock;
+            for (var slot = 0; slot < Math.Clamp(s.MaxWeaves, 1, 2) && s.Time + AbilityLock <= next; slot++)
+            {
+                var off = ChooseOff(s, false, false, true);
+                if (off == 0) break;
+                ApplyOff(ref s, off, check, false);
+                Advance(ref s, AbilityLock, check);
+            }
+        }
+        return false;
+    }
+
     internal static int BeforeIkishotenLimit(Samurai100State s)
     {
         var income = 0;
@@ -486,10 +565,15 @@ internal static class Samurai100Projection
             if (s.UseShoha && s.Meditation == 3 && s.Distance <= s.ShohaRange &&
                 s.Time + s.ShohaCd + AbilityLock <= next)
             {
-                Advance(ref s, s.ShohaCd, check);
-                ApplyOff(ref s, SAMSkill.照破, check, false);
-                Advance(ref s, AbilityLock, check);
-                slots--;
+                var ready = s;
+                Advance(ref ready, s.ShohaCd, check);
+                if (Samurai100Weave.ShouldShoha(ready))
+                {
+                    s = ready;
+                    ApplyOff(ref s, SAMSkill.照破, check, false);
+                    Advance(ref s, AbilityLock, check);
+                    slots--;
+                }
             }
             if (slots > 0 && s.Time + s.IkiCd + AbilityLock <= next)
             {
@@ -582,7 +666,7 @@ internal static class Samurai100Projection
         if (!beforePotion && Samurai100Rules.CanIkishoten(s, out _)) return SAMSkill.意气冲天;
         if (!beforePotion && Samurai100Weave.SeneiReady(s)) return SAMSkill.必杀剑_闪影;
         if (!beforePotion && float.IsFinite(Samurai100Weave.CooldownDelay(s))) return 0;
-        if (Samurai100Weave.ShohaReady(s)) return SAMSkill.照破;
+        if (Samurai100Weave.ShouldShoha(s)) return SAMSkill.照破;
         if (Samurai100Rules.CanZanshin(s, budget) && (!beforePotion || s.Zanshin < 2 * s.Gcd)) return SAMSkill.残心;
         if (budget)
         {
@@ -711,12 +795,12 @@ internal static class Samurai100Projection
         if (action == SAMSkill.明镜止水)
         {
             s.MirrorCharges--; s.MirrorStacks = 3; s.MirrorLeft = 20; s.Tendo = 30; r.Mirrors++; s.MirrorsLeft--;
-            if (s.MirrorRequested) { s.MirrorRequested = false; s.UseMirror = s.AutoMirror; }
+            if (s.MirrorRequested) { s.MirrorRequested = s.MirrorForced = false; s.UseMirror = s.AutoMirror; }
         }
         if (action == SAMSkill.意气冲天)
         { s.Kenki = Math.Min(100, s.Kenki + 50); s.Ogi = 30; s.Zanshin = 30; s.IkiCd = 120; }
         if (action == SAMSkill.照破)
-        { Damage(ref s, r, 640, window); s.Meditation = 0; s.ShohaCd = 1; }
+        { Damage(ref s, r, 640, window); s.Meditation = 0; s.ShohaCd = 15; }
         if (action == SAMSkill.残心)
         { Damage(ref s, r, 940, window); s.Kenki -= 50; s.Zanshin = 0; s.ZanshinCd = 1; }
         if (action == SAMSkill.必杀剑_闪影)

@@ -16,7 +16,7 @@ public sealed class MachinistOutputWindowAction : IAction, ISerializableAction, 
     public NodeParamInfo[] Params =>
     [
         new("seconds", "距离不可选中（秒）", "从节点执行开始计算", "float"),
-        new("keep", "保留期末资源", "计时窗口在期末达标；事件/不可选中窗口在前窗口开始时达标并保持", "bool"),
+        new("keep", "保留期末资源", "按预计结束时点尽力保留，结合窗口收益取舍；不为达标持续溢出整组过热", "bool"),
         new("heat", "期末热量", "", "int"), new("battery", "期末电量", "", "int"),
         new("time", "到时间直接结束", "", "bool"), new("enemies", "Boss不可选中结束", "100米内无可攻击敌人", "bool"),
         new("event", "事件发生结束", "事件优先于不可选中，再优先于直接结束", "bool"),
@@ -79,8 +79,8 @@ public sealed class MachinistOutputWindowAction : IAction, ISerializableAction, 
         if (ImGui.InputText("##结束匹配", ref match, 512)) _settings = _settings with { Match = match };
         DrawFloat("before", "前窗口（秒）"); ImGui.SameLine(); DrawFloat("after", "后窗口（秒）");
         ImGui.TextWrapped("比较窗口内可结算收益；不保留资源不等于立刻倾泻。结束方式优先级：事件 > 无可攻击敌人 > 计时。");
-        if (_settings.KeepResources && (_settings.EndOnEvent || _settings.EndWithoutEnemies))
-            ImGui.TextWrapped("资源将在前窗口开始时达标，并保持到实际结束；后窗口不作为保证的输出时间。");
+        if (_settings.KeepResources)
+            ImGui.TextWrapped("期末资源按预计结束时点尽力保留。前窗口仅提前检测结束，后窗口不作为保证的输出时间。");
         // 校验只使用临时实例，不向正在运行的时间轴发布设置。
         if (_validated != _settings)
         {

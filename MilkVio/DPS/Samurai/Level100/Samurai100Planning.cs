@@ -171,6 +171,8 @@ internal static class Samurai100Planning
         }
         if (action == SAMSkill.雪风 && live.MirrorStacks > 0 && !live.Dump)
             reason = "异常兜底：已有明镜仅缺雪，月花无法继续";
+        else if (action == SAMSkill.雪风 && Samurai100Projection.RequestedPreparation(Samurai100Projection.AtNextGcd(live)) == action)
+            reason = "先用雪连为一次明镜请求准备，随后用月花衔接";
         if (action == SAMSkill.月光 && live.MirrorStacks <= 0 && live.Combo != SAMSkill.阵风) return false;
         if (action == SAMSkill.花车 && live.MirrorStacks <= 0 && live.Combo != SAMSkill.士风) return false;
         if (action == SAMSkill.奥义斩浪 && live.Ogi <= live.GcdLeft + live.OgiCast) return false;
@@ -233,7 +235,8 @@ internal static class Samurai100Planning
             a.UseDot == b.UseDot && a.UseMirror == b.UseMirror && a.UseIki == b.UseIki && a.UseSenei == b.UseSenei &&
             a.UseOgi == b.UseOgi && a.UseZanshin == b.UseZanshin && a.UseShinten == b.UseShinten && a.UseShoha == b.UseShoha &&
             a.Immediate == b.Immediate && a.Dump == b.Dump && a.ForcePadding == b.ForcePadding && a.DelayReturn == b.DelayReturn &&
-            a.MirrorRequested == b.MirrorRequested && a.AutoMirror == b.AutoMirror;
+            a.MirrorRequested == b.MirrorRequested && a.MirrorForced == b.MirrorForced &&
+            a.TargetUnavailable == b.TargetUnavailable && a.AutoMirror == b.AutoMirror;
     }
 
     // 只从自动能力技入口调用；起手期间宿主不会走这里。
@@ -301,6 +304,7 @@ internal static class Samurai100Planning
         return new Samurai100State
         {
             Player = me.EntityId, Target = Core.Target?.EntityId ?? 0,
+            TargetUnavailable = Core.Target == null || Core.Target.IsDead || !Core.Target.IsTargetable || Core.Target.EntityId == me.EntityId,
             Sen = (JobGaugeHelper.SAM.HasYuki ? 1 : 0) | (JobGaugeHelper.SAM.HasMoon ? 2 : 0) | (JobGaugeHelper.SAM.HasHana ? 4 : 0),
             Kenki = JobGaugeHelper.SAM.剑气, Meditation = JobGaugeHelper.SAM.剑压,
             MaxWeaves = MaxWeaves,
@@ -325,6 +329,7 @@ internal static class Samurai100Planning
             UseDot = Samurai100Helper.UseHiganbana,
             UseMirror = PromeSettings.Instance.GetQt(SAMQt.明镜止水) || SamuraiTimeline.MirrorPending,
             AutoMirror = PromeSettings.Instance.GetQt(SAMQt.明镜止水), MirrorRequested = SamuraiTimeline.MirrorPending,
+            MirrorForced = SamuraiTimeline.MirrorForced,
             UseIki = SamuraiHelper.AllowIkishoten, UseSenei = SamuraiHelper.AllowSenei, UseOgi = SamuraiHelper.AllowOgi,
             UseZanshin = SamuraiHelper.AllowZanshin, UseShinten = SamuraiHelper.AllowShinten, UseShoha = PromeSettings.Instance.GetQt(SAMQt.照破),
             Immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀) &&

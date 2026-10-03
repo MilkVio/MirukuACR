@@ -88,7 +88,7 @@ public static class Samurai100Burst
         if (Samurai100Weave.SeneiReady(state)) { reason = "先使用已就绪的闪影"; return false; }
         if (!Samurai100Rules.CanZanshin(state)) { reason = "为闪影保留25剑气"; return false; }
         if (Core.Me.DistanceToMe() > GameData.GetCurrentAttackRange(8)) return false;
-        if (Samurai100Weave.ShohaReady(state)) { reason = "先用照破，防止剑压溢出"; return false; }
+        if (Samurai100Weave.ShouldShoha(state)) { reason = "先用照破，防止剑压溢出"; return false; }
         var left = Core.Me.GetStatusLeftTime(SAMBuff.残心预备);
         if (left <= Samurai100Helper.GcdRemain + Samurai100Helper.GcdSeconds)
         { reason = "残心即将到期"; return true; }
