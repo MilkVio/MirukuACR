@@ -10,7 +10,7 @@ public sealed class SamuraiPotionAction : IAction, ISerializableAction, IJobNode
     private const string TypeKey = "milkviosampotion";
     private float _seconds = 10;
     public string NodeDisplayName => "最优爆发药";
-    public NodeParamInfo[] Params => [new("seconds", "允许等待（秒）", "0至30秒；0只在下一次自动选招时立即尝试，不能使用则结束", "float")];
+    public NodeParamInfo[] Params => [new("seconds", "允许等待（秒）", "0～30；0表示立即尝试一次", "float")];
     public string GetParam(string fieldName) => fieldName == "seconds" ? _seconds.ToString(CultureInfo.InvariantCulture) : "";
     public void SetParam(string fieldName, string value)
     {

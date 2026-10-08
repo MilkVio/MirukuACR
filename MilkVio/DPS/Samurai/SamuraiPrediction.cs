@@ -92,6 +92,8 @@ internal sealed class SamuraiPredictionHints
     public void Observe(ulong source, ulong target, uint action, uint sequence, long now)
     {
         if (Core.Me == null || source != Core.Me.EntityId || !IsGcd(action)) return;
+        if (Samurai100Helper.GatherSen && Samurai100Gather.IsAoe(action) && target == source)
+            target = Core.Target?.EntityId ?? target;
         lock (_gate)
         {
             if (_action == action && _sequence == sequence && (sequence != 0 || now - _at < 1000)) return;
@@ -143,12 +145,13 @@ internal sealed class SamuraiPredictionHints
 
     private static bool EffectVisible(uint action, Samurai100State s)
     {
-        if (action == SAMSkill.晓风 || action == SAMSkill.阵风 || action == SAMSkill.士风) return s.Combo == action;
+        if (action == SAMSkill.晓风 || action == SAMSkill.阵风 || action == SAMSkill.士风 ||
+            s.GatherSen && action == SAMSkill.风光) return s.Combo == action;
         if (action == SAMSkill.月光) return (s.Sen & 2) != 0 && s.Combo == 0;
         if (action == SAMSkill.花车) return (s.Sen & 4) != 0 && s.Combo == 0;
         if (action == SAMSkill.雪风) return (s.Sen & 1) != 0 && s.Combo == 0;
-        if (action == SAMSkill.满月) return (s.Sen & 2) != 0;
-        if (action == SAMSkill.樱花) return (s.Sen & 4) != 0;
+        if (action == SAMSkill.满月) return (s.Sen & 2) != 0 && (!s.GatherSen || s.Combo == 0);
+        if (action == SAMSkill.樱花) return (s.Sen & 4) != 0 && (!s.GatherSen || s.Combo == 0);
         if (action == SAMSkill.彼岸花) return s.SenCount == 0 && s.Dot > 55;
         if (action == SAMSkill.纷乱雪月花 || action == SAMSkill.天道雪月花 ||
             action == SAMSkill.天下五剑 || action == SAMSkill.天道五剑) return s.SenCount == 0 && s.ReturnLeft > 0;

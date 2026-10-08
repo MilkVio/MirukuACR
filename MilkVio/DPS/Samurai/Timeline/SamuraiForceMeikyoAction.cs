@@ -8,7 +8,7 @@ public sealed class SamuraiForceMeikyoAction : IAction, ISerializableAction, IJo
     private const string TypeKey = "milkviosamforcemeikyo";
     private bool _waitForCharge;
     public string NodeDisplayName => "强制请求一次明镜";
-    public NodeParamInfo[] Params => [new("waitForCharge", "等待层数可用", "无普通穿插时允许卡GCD；仍保护连击、已有明镜和天道，不主动明镜打雪。关闭等待且无充能则丢弃", "bool")];
+    public NodeParamInfo[] Params => [new("waitForCharge", "等待层数可用", "关闭且无充能时丢弃请求", "bool")];
     public string GetParam(string fieldName) => fieldName == "waitForCharge" ? _waitForCharge.ToString() : "";
     public void SetParam(string fieldName, string value)
     {

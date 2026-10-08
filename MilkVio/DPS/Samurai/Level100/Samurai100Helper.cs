@@ -10,13 +10,14 @@ namespace MilkVio.DPS.Samurai.Level100;
 
 public static class Samurai100Helper
 {
-    // 仅接管百级单体。
+    // 百级取闪；完整群攻仍走原分支。
+    public static bool GatherSen => Core.Me?.Level == 100 && PromeSettings.Instance.GetQt(SAMQt.AOE凑闪);
     public static bool Enabled => Core.Me?.Level == 100 &&
-        !(PromeSettings.Instance.GetQt(SAMQt.AOE) && TargetHelper.EnemyIn5m() >= 3);
+        (GatherSen || !(PromeSettings.Instance.GetQt(SAMQt.AOE) && TargetHelper.EnemyIn5m() >= 3));
 
     public const float EffectMargin = 0.2f;
     public static float GcdRemain => Math.Max(0, ActionHelper.GetGcdRemain());
-    public static bool UseHiganbana => PromeSettings.Instance.GetQt(SAMQt.彼岸花);
+    public static bool UseHiganbana => SamuraiHelper.AllowHiganbana;
     public static float HiganbanaLeft => SamuraiHelper.GetOwnHiganbanaLeftTime();
 
     public static unsafe float GcdSeconds
@@ -52,6 +53,7 @@ public static class Samurai100Helper
         if (!float.IsFinite(time) || time <= GcdRemain + EffectMargin) return 0;
         var id = ActionHelper.GetLastComboID();
         if (id == SAMSkill.晓风 || id == SAMSkill.阵风 || id == SAMSkill.士风) return id;
+        if (GatherSen && id == SAMSkill.风光) return id;
         return 0;
     }
 
@@ -69,6 +71,7 @@ public static class Samurai100Helper
 
     public static int GcdsToThreeSen()
     {
+        if (GatherSen) return Samurai100Projection.ToThree(Samurai100Planning.ReadState());
         var snow = JobGaugeHelper.SAM.HasYuki;
         var moon = JobGaugeHelper.SAM.HasMoon;
         var hana = JobGaugeHelper.SAM.HasHana;
@@ -155,6 +158,9 @@ public static class Samurai100Helper
         var resourceAction = Samurai100Projection.NextBaseGcd(resourceState);
         if (Samurai100Weave.BeforeCast(Samurai100Projection.AtNextGcd(resourceState), resourceAction, Samurai100Planning.PotionPending) != resourceAction)
             return 居合类型.无;
+        if (GatherSen)
+            return resourceAction == SAMSkill.彼岸花 ? 居合类型.彼岸花 :
+                resourceAction == SAMSkill.纷乱雪月花 ? 居合类型.雪月花 : 居合类型.无;
         var count = JobGaugeHelper.SAM.GetSenCount();
         var moon = Core.Me.GetStatusLeftTime(SAMBuff.风月);
         var castEnd = HiganbanaTimeAfter(0);
@@ -185,6 +191,12 @@ public static class Samurai100Helper
         if (Samurai100Planning.TryGcd(out var planned, out _))
             return planned == SAMSkill.晓风 || planned == SAMSkill.阵风 || planned == SAMSkill.士风 ||
                    planned == SAMSkill.雪风 || planned == SAMSkill.月光 || planned == SAMSkill.花车 ? planned : 0;
+        if (GatherSen)
+        {
+            var action = Samurai100Projection.NextResourceGcd(Samurai100Planning.ReadState());
+            return action == SAMSkill.晓风 || action == SAMSkill.阵风 || action == SAMSkill.士风 ||
+                   action == SAMSkill.雪风 || action == SAMSkill.月光 || action == SAMSkill.花车 ? action : 0;
+        }
         if (Samurai100Rules.PaddingGcd(Samurai100Planning.ReadState(), out var filler)) return filler;
         var state = Samurai100Planning.ReadState();
         var next = Samurai100Projection.NextBaseGcd(state);

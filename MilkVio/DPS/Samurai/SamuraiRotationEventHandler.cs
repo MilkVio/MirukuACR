@@ -13,6 +13,7 @@ public class SamuraiRotationEventHandler : IRotationEventHandler
 
     public void OnUpdate()
     {
+        _rotation.UpdateMeditation();
         _rotation.UpdatePlanning();
         _rotation.UpdatePrediction();
         _rotation.UpdateDebugLog();
@@ -20,10 +21,12 @@ public class SamuraiRotationEventHandler : IRotationEventHandler
 
     public void OnOutOfBattleUpdate()
     {
+        SamuraiHiganbanaBlacklist.Update();
     }
 
     public void OnBattleStarted()
     {
+        SamuraiHiganbanaBlacklist.Update();
         _rotation.ResetPrediction();
         _rotation.UpdateDebugLog();
         _rotation.DebugLog.CombatStarted(Environment.TickCount64);

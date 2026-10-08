@@ -4,11 +4,13 @@ using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using MilkVio.DPS.Samurai.SAMData;
 using MilkVio.DPS.Samurai.Level100;
+using MilkVio.DPS.Samurai.Timeline;
 
 namespace MilkVio.DPS.Samurai;
 
 public static class SamuraiHelper
 {
+    public static bool AllowHiganbana => PromeSettings.Instance.GetQt(SAMQt.彼岸花) && !SamuraiHiganbanaBlacklist.BlocksCurrentTarget;
     public static bool AllowIkishoten => !PromeSettings.Instance.GetQt(SAMQt.不打120);
     public static bool AllowSenei => PromeSettings.Instance.GetQt(SAMQt.闪影红莲);
     public static bool AllowOgi => PromeSettings.Instance.GetQt(SAMQt.奥义斩浪);
@@ -257,7 +259,7 @@ public static class SamuraiHelper
         
         if (JobGaugeHelper.SAM.GetSenCount() == 1)
         {
-            if ((!isTargetHasBianhua || bianhuaLeftTime < 3) && PromeSettings.Instance.GetQt(SAMQt.彼岸花) && !PromeSettings.Instance.GetQt(SAMQt.倾泻资源))
+            if ((!isTargetHasBianhua || bianhuaLeftTime < 3) && AllowHiganbana && !PromeSettings.Instance.GetQt(SAMQt.倾泻资源))
             {
                 return 居合类型.彼岸花;
             }

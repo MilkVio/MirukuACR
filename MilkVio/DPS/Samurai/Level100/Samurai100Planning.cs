@@ -38,6 +38,8 @@ internal static class Samurai100Planning
     }
     public static bool PotionPending => _pending;
 
+    public static void Invalidate() { _plan = null; _readAt = 0; }
+
     public static void Enter()
     {
         Reset("进入SAM");
@@ -96,6 +98,7 @@ internal static class Samurai100Planning
             WriteNote?.Invoke("药效结束，按当前资源接回循环");
         _hadPotion = s.Potion > 0;
         if (_pending && now > _deadline) FinishPotion(_lastAttempt > 0 ? "用药期限结束，尚未观察到成功" : "用药期限结束，没有合法用药位置");
+        if (SamuraiMeditation.Blocking) { Invalidate(); return; }
         if (Core.Target == null || Core.Target.IsDead || !Core.Target.IsTargetable || s.Target == s.Player || s.Casting)
         { _plan = null; return; }
         var preparing = Samurai100Rules.Preparing(s);
@@ -108,7 +111,8 @@ internal static class Samurai100Planning
         if (s.Potion > 0) window = s.Potion;
         else if (s.Party > 0) window = Math.Max(window, s.Party);
         // 平稳期也看续花和下一次明镜，避免到爆发才临时拼资源。
-        if (!_pending && window <= 0) window = Math.Clamp(s.Dot + 5, 20, 40);
+        if (!_pending && window <= 0)
+            window = SamuraiHiganbanaBlacklist.BlocksCurrentTarget ? 20 : Math.Clamp(s.Dot + 5, 20, 40);
         if (now - _readAt < 80 && SameResources(s, _state)) return;
         _readAt = now;
         s.ReturnIsOld = s.ReturnLeft > 0;
@@ -175,6 +179,8 @@ internal static class Samurai100Planning
             reason = "先用雪连为一次明镜请求准备，随后用月花衔接";
         if (action == SAMSkill.月光 && live.MirrorStacks <= 0 && live.Combo != SAMSkill.阵风) return false;
         if (action == SAMSkill.花车 && live.MirrorStacks <= 0 && live.Combo != SAMSkill.士风) return false;
+        if ((action == SAMSkill.满月 || action == SAMSkill.樱花) && live.Combo != SAMSkill.风光) return false;
+        if (Samurai100Gather.IsAoe(action) && (!live.GatherSen || live.Distance > live.AoeRange || live.TargetUnavailable)) return false;
         if (action == SAMSkill.奥义斩浪 && live.Ogi <= live.GcdLeft + live.OgiCast) return false;
         return true;
     }
@@ -206,9 +212,10 @@ internal static class Samurai100Planning
 
     private static bool ValidPlan()
     {
+        // 读取目标时可能清理过期名单，让旧计划失效。
         return _entered && _plan?.Computed == true && Samurai100Helper.Enabled && GameData.IsInCombat() && Core.Me != null &&
                !Core.Me.IsDead && Core.Target != null && Core.Target.IsTargetable && !Core.Target.IsDead &&
-               Now - _readAt <= 250 && SameResources(ReadState(), _state);
+               Now - _readAt <= 250 && SameResources(ReadState(), _state) && _plan != null;
     }
 
     private static bool SameResources(Samurai100State a, Samurai100State b)
@@ -236,6 +243,7 @@ internal static class Samurai100Planning
             a.UseOgi == b.UseOgi && a.UseZanshin == b.UseZanshin && a.UseShinten == b.UseShinten && a.UseShoha == b.UseShoha &&
             a.Immediate == b.Immediate && a.Dump == b.Dump && a.ForcePadding == b.ForcePadding && a.DelayReturn == b.DelayReturn &&
             a.MirrorRequested == b.MirrorRequested && a.MirrorForced == b.MirrorForced &&
+            a.GatherSen == b.GatherSen && a.DelayShoha == b.DelayShoha && a.AoeRange == b.AoeRange &&
             a.TargetUnavailable == b.TargetUnavailable && a.AutoMirror == b.AutoMirror;
     }
 
@@ -253,6 +261,7 @@ internal static class Samurai100Planning
 
     private static unsafe bool TryUsePotion(long now)
     {
+        if (SamuraiMeditation.Blocking) return false;
         if (_lastAttempt > 0 && now - _lastAttempt < 1400) return true;
         if (!_pending) return false;
         if (now > _deadline) { FinishPotion("用药期限结束"); return false; }
@@ -323,6 +332,7 @@ internal static class Samurai100Planning
             Distance = Core.Target == null ? 100 : me.DistanceToMe(), Moving = MoveManager.IsLocalPlayerMoving, Casting = me.IsCasting,
             MeleeRange = GameData.GetCurrentMeleeRange(), IaiRange = GameData.GetCurrentAttackRange(6),
             OgiRange = GameData.GetCurrentAttackRange(8), ShohaRange = GameData.GetCurrentAttackRange(10),
+            AoeRange = 5,
             BattleTime = (float)EngageManager.GetBattleTime(), Eye = me.GetStatusLeftTime(SAMBuff.天眼通),
             Position = TargetHelper.GetTargetPositional(), TrueNorth = me.GetStatusLeftTime(1250),
             NeedsPosition = Core.Target != null && TargetHelper.HasPositionalRequirement(Core.Target),
@@ -335,6 +345,7 @@ internal static class Samurai100Planning
             Immediate = PromeSettings.Instance.GetQt(SAMQt.立即回返) && !PromeSettings.Instance.GetQt(SAMQt.强制垫刀) &&
                         !PromeSettings.Instance.GetQt(SAMQt.延迟回返),
             ForcePadding = PromeSettings.Instance.GetQt(SAMQt.强制垫刀), DelayReturn = PromeSettings.Instance.GetQt(SAMQt.延迟回返),
+            GatherSen = Samurai100Helper.GatherSen, DelayShoha = PromeSettings.Instance.GetQt(SAMQt.延后照破),
             Dump = PromeSettings.Instance.GetQt(SAMQt.倾泻资源)
         };
     }

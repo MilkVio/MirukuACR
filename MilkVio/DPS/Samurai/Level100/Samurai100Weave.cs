@@ -3,6 +3,7 @@ using PromeRotation.Data;
 using PromeRotation.Helpers;
 using PromeRotation.Managers;
 using PromeRotation.Updaters;
+using MilkVio.DPS.Samurai.Timeline;
 
 namespace MilkVio.DPS.Samurai.Level100;
 
@@ -52,7 +53,7 @@ internal static class Samurai100Weave
         CastTime(s, Samurai100Projection.NextResourceGcd(s)) > 0;
 
     public static bool ShouldShoha(Samurai100State s) => ShohaReady(s) &&
-        (!s.ForcePadding || ShohaUrgent(s) || Samurai100Projection.ShohaCooldownRisk(s));
+        (!s.DelayShoha || ShohaUrgent(s) || Samurai100Projection.ShohaCooldownRisk(s));
 
     // 留出即将转好的能力技位置，不用震天、真北把它占掉。
     public static float CooldownDelay(Samurai100State s)
@@ -96,7 +97,7 @@ internal static class Samurai100Weave
     public static bool TryEmergency(out uint action, out string reason, bool nextGcd = false)
     {
         action = 0; reason = "";
-        if (!Samurai100Helper.Enabled || !GameData.IsInCombat() || Core.Me == null ||
+        if (SamuraiMeditation.Blocking || !Samurai100Helper.Enabled || !GameData.IsInCombat() || Core.Me == null ||
             Core.Me.IsDead || Core.Me.IsCasting || PromeSettings.Instance.EnableAcr != AcrState.On ||
             ActionQueueManager.HasHighPriorityAction()) return false;
         var s = Samurai100Planning.ReadState();

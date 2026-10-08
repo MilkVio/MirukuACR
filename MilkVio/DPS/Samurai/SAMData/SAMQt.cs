@@ -17,4 +17,6 @@ public static class SAMQt
     public static string 立即回返 = "立即回返";
     public static string 延迟回返 = "延迟回返";
     public static string 强制垫刀 = "强制垫刀";
+    public static string AOE凑闪 = "AOE凑闪";
+    public static string 延后照破 = "延后照破";
 }

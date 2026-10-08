@@ -44,6 +44,7 @@ internal static class SamuraiTimeline
 
     public static void Update()
     {
+        SamuraiHiganbanaBlacklist.Update();
         if (MirrorPending && (Core.Me == null || Core.Me.EntityId != _player ||
             Core.Me.ClassJob.RowId != (uint)Job.SAM || Core.Me.Level != 100)) ClearRequest("离开百级武士");
     }
@@ -52,15 +53,20 @@ internal static class SamuraiTimeline
     {
         if (MirrorPending) Samurai100Planning.WriteNote?.Invoke($"明镜请求结束：{reason}");
         MirrorPending = MirrorForced = false; _player = 0; Status = $"没有明镜请求（{reason}）";
+        Samurai100Planning.Invalidate();
     }
 
     // 普通重算、死亡和暂时无目标不取消当前战斗的时间轴控制。
     public static void ResetSession(string reason)
     {
+        SamuraiHiganbanaBlacklist.Clear(reason);
         ClearRequest(reason);
         if (PromeSettings.Instance.GetQt(SAMQt.强制垫刀)) Samurai100Planning.WriteNote?.Invoke($"强制垫刀已关闭：{reason}");
         PromeSettings.Instance.SetQt(SAMQt.强制垫刀, false);
         if (PromeSettings.Instance.GetQt(SAMQt.延迟回返)) Samurai100Planning.WriteNote?.Invoke($"延迟回返已关闭：{reason}");
         PromeSettings.Instance.SetQt(SAMQt.延迟回返, false);
+        PromeSettings.Instance.SetQt(SAMQt.AOE凑闪, false);
+        PromeSettings.Instance.SetQt(SAMQt.延后照破, false);
+        SamuraiMeditation.Clear(reason);
     }
 }

@@ -69,6 +69,8 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         {SAMData.SAMQt.立即回返, false},
         {SAMData.SAMQt.延迟回返, false},
         {SAMData.SAMQt.强制垫刀, false},
+        {SAMData.SAMQt.AOE凑闪, false},
+        {SAMData.SAMQt.延后照破, false},
     };
     // 起手列表
     public static IReadOnlyDictionary<string, Type> Openers { get; } = new Dictionary<string, Type>
@@ -138,6 +140,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
                 ActionUpdater.Reset();
                 Samurai100Planning.Reset("手动清扫队列");
                 SamuraiTimeline.ClearRequest("手动清扫队列");
+                SamuraiMeditation.Clear("手动清扫队列");
                 Svc.Chat.PrintError("[PromeRotation] 清扫队列");
             }),
             customIconPath: "Resources/Clear.png");
@@ -167,6 +170,8 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
     
     public PAction? NextAlways()
     {
+        UpdateMeditation();
+        if (SamuraiMeditation.Blocking) return null;
         var emergency = Samurai100Weave.AlwaysAction(out var reason);
         if (emergency != null)
         {
@@ -178,6 +183,8 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
 
     public PAction? NextGcd()
     {
+        UpdateMeditation();
+        if (SamuraiMeditation.Blocking) return null;
         _automaticPrediction = true;
         UpdatePlanning();
         return ResolveNextGcd(true);
@@ -186,6 +193,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
     // 真北和诊断读取同一份选招，不记录第二次选择。
     private PAction? ResolveNextGcd(bool record)
     {
+        if (SamuraiMeditation.Blocking) return null;
         var blocked = record && DebugLog.Enabled ? new List<string>() : null;
         // 遍历所有GCD解析器
         foreach (var resolver in _gcdResolvers)
@@ -207,6 +215,8 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
     
     public PAction? NextOffGcd()
     {
+        UpdateMeditation();
+        if (SamuraiMeditation.Blocking) return null;
         _automaticPrediction = true;
         UpdatePlanning();
         if (Samurai100Planning.TryUsePotionNow(Samurai100Planning.Now)) return null;
@@ -256,6 +266,12 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         }
     }
 
+    internal void UpdateMeditation()
+    {
+        SamuraiMeditation.Update();
+        if (SamuraiMeditation.Blocking) ResetPrediction();
+    }
+
     internal void ResetPrediction()
     {
         _automaticPrediction = false;
@@ -265,6 +281,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
 
     internal void UpdatePrediction()
     {
+        if (SamuraiMeditation.Blocking) { ResetPrediction(); return; }
         var settings = SAMSettings.Instance;
         if (!settings.显示技能预测 && !settings.显示下G横幅)
         { Prediction = default; _predictionHints.Reset(); return; }
@@ -342,7 +359,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
             details += $" 留一闪={Samurai100Helper.KeepOneSenForHiganbana()} 预计居合={Samurai100Helper.GetBestIaijutsu()} " +
                        $"花预计生效={Samurai100Helper.HiganbanaTimeAfter(Samurai100Helper.GcdsToNextHiganbana()):F3} " +
                        $"剑气留用={Samurai100Burst.ReservedKenki()} 下刀剑气={Samurai100Burst.NextKenkiGain()} " +
-                       $"规划={Samurai100Planning.Description} 用药={Samurai100Planning.Status} 明镜请求={SamuraiTimeline.Status}";
+                       $"规划={Samurai100Planning.Description} 用药={Samurai100Planning.Status} 默想={SamuraiMeditation.Status} 明镜请求={SamuraiTimeline.Status}";
         return new SamuraiDebugState
         {
             Now = now, PlayerId = me.EntityId, Alive = !me.IsDead, InCombat = GameData.IsInCombat(), HasTarget = validTarget,
@@ -356,11 +373,13 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         OnExitAcr();
         DebugLog = CreateDebugLog();
         Samurai100Planning.WriteNote = note => DebugLog.ObserveNote(Environment.TickCount64, note);
+        SamuraiHiganbanaBlacklist.Changed = () => { Prediction = default; _predictionHints.Reset(); };
         Samurai100Planning.Enter();
         SamuraiTimeline.ResetSession("进入SAM");
         Svc.PluginInterface.UiBuilder.Draw += DrawPrediction;
         _subscriptions.Add(PromeEventBus.OnActionEffect(this, e =>
         {
+            SamuraiMeditation.ObserveEffect(e.SourceId, e.ActionId);
             Samurai100Planning.ObserveEffect(e.SourceId, e.ActionId, e.GlobalSequence, Environment.TickCount64);
             DebugLog.ObserveEffect(e.SourceId, e.TargetId, e.ActionId, e.GlobalSequence, Environment.TickCount64);
             if (SAMSettings.Instance.显示下G横幅)
@@ -392,6 +411,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         _subscriptions.Add(PromeEventBus.OnPlayerDied(this, () =>
         {
             Samurai100Planning.Reset("死亡");
+            SamuraiMeditation.Clear("死亡");
             ResetPrediction();
             DebugLog.ObserveNote(Environment.TickCount64, "死亡");
         }));
@@ -403,6 +423,7 @@ public class SamuraiRotation : IRotation, IRotationLifecycle
         Svc.PluginInterface.UiBuilder.Draw -= DrawPrediction;
         ResetPrediction();
         SamuraiTimeline.ResetSession("退出SAM");
+        SamuraiHiganbanaBlacklist.Changed = null;
         Samurai100Planning.Exit();
         foreach (var subscription in _subscriptions) subscription.Dispose();
         _subscriptions.Clear();

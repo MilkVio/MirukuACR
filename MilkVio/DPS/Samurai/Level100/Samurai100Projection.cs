@@ -11,7 +11,7 @@ internal record struct Samurai100State
     public float Gcd, Cast, OgiCast, GcdLeft, ComboLeft, Moon, Flower, Dot;
     public float MirrorCharges, MirrorLeft, Tendo, ReturnLeft, Ogi, Zanshin;
     public float IkiCd, SeneiCd, ShohaCd, ShintenCd, ZanshinCd, Potion, Party, Distance;
-    public float MeleeRange, IaiRange, OgiRange, ShohaRange, WindowStart, PotionReadyAt;
+    public float MeleeRange, IaiRange, OgiRange, ShohaRange, AoeRange, WindowStart, PotionReadyAt;
     public float BattleTime, Eye, TrueNorth;
     public Positional Position;
     public bool NeedsPosition;
@@ -19,6 +19,7 @@ internal record struct Samurai100State
     public bool UseDot, UseMirror, UseIki, UseSenei, UseOgi, UseZanshin, UseShinten, UseShoha, Immediate, Dump;
     public bool ReturnIsOld;
     public bool ForcePadding, DelayReturn, MirrorRequested, MirrorForced, AutoMirror, TargetUnavailable;
+    public bool GatherSen, DelayShoha;
     public float Time;
     // 仅本次推算使用，不保存到战斗状态。
     public float FlowerDelay, DotValue;
@@ -311,7 +312,8 @@ internal static class Samurai100Projection
             (!holdReturn || s.Dot > cast + 5)) return SAMSkill.燕回返;
         var waiting = Samurai100Rules.WaitingIaijutsu(s, KeepSen(s));
         if (waiting != 0 && !canCast) return 0;
-        if (s.Distance > s.MeleeRange) return canReturn ? SAMSkill.燕回返 : 0;
+        if (s.Distance > s.MeleeRange && !(s.GatherSen && s.MirrorStacks == 0 && s.Distance <= s.AoeRange))
+            return canReturn ? SAMSkill.燕回返 : 0;
         if (s.MirrorStacks > 0)
         {
             if (s.SenCount == 3) return canReturn ? SAMSkill.燕回返 : 0;
@@ -328,12 +330,20 @@ internal static class Samurai100Projection
         var keep = KeepSen(s);
         if (combo == SAMSkill.阵风 || combo == SAMSkill.士风)
         {
+            if (s.GatherSen && s.Distance > s.MeleeRange) return 0;
             if ((s.SenCount == 3 || keep) && s.Moon <= cast) return SAMSkill.晓风;
             if (s.SenCount == 3) return canReturn ? SAMSkill.燕回返 : 0;
             if (keep) return canCast && s.Moon > cast && Samurai100Rules.CanRefreshHiganbana(s) ? SAMSkill.彼岸花 : 0;
             var bit = combo == SAMSkill.阵风 ? 2 : 4;
             return (s.Sen & bit) == 0 ? bit == 2 ? SAMSkill.月光 : SAMSkill.花车 : SAMSkill.晓风;
         }
+        if (s.GatherSen && combo == SAMSkill.风光 && (s.SenCount == 3 || keep))
+        {
+            if (s.Moon <= cast && s.Distance <= s.MeleeRange) return SAMSkill.晓风;
+            return keep && canCast && s.Moon > cast && Samurai100Rules.CanRefreshHiganbana(s) ? SAMSkill.彼岸花 : 0;
+        }
+        if (s.GatherSen && !keep && s.SenCount < 3) return Samurai100Gather.Next(s);
+        if (s.GatherSen && s.Distance > s.MeleeRange) return 0;
         if (combo != SAMSkill.晓风) return SAMSkill.晓风;
         if (s.Moon <= 0 && s.Flower <= 0 && s.SenCount == 0) return SAMSkill.士风;
         if (s.Moon <= cast + 3 * s.Gcd && (s.Moon <= s.Flower || keep || s.SenCount == 3)) return SAMSkill.阵风;
@@ -358,6 +368,7 @@ internal static class Samurai100Projection
 
     internal static int ToThree(Samurai100State s)
     {
+        if (s.GatherSen) return Samurai100Gather.ToThree(s);
         var snow = (s.Sen & 1) != 0; var moon = (s.Sen & 2) != 0; var flower = (s.Sen & 4) != 0;
         var count = (snow ? 0 : 2) + (moon ? 0 : 3) + (flower ? 0 : 3);
         var stacks = s.MirrorStacks;
@@ -721,6 +732,14 @@ internal static class Samurai100Projection
         var sen = 0; var gain = 0; var potency = 0f; var meditation = false;
         var oldMoon = s.Moon;
         if (action == SAMSkill.晓风) { gain = 5; potency = 240; s.Combo = action; s.ComboLeft = 30; }
+        else if (action == SAMSkill.风光) { gain = 10; potency = 100; s.Combo = action; s.ComboLeft = 30; }
+        else if (action == SAMSkill.满月 || action == SAMSkill.樱花)
+        {
+            sen = action == SAMSkill.满月 ? 2 : 4; gain = 10; potency = 120;
+            if ((s.Sen & sen) != 0) r.Lost++;
+            s.Sen |= sen; s.Combo = 0; s.ComboLeft = 0;
+            if (sen == 2) s.Moon = 40; else s.Flower = 40;
+        }
         else if (action == SAMSkill.阵风 || action == SAMSkill.士风)
         {
             gain = 5; potency = 300; s.Combo = action; s.ComboLeft = 30;

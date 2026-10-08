@@ -8,7 +8,7 @@ public sealed class SamuraiMeikyoAction : IAction, ISerializableAction, IJobNode
     private const string TypeKey = "milkviosammeikyo";
     private bool _waitForCharge;
     public string NodeDisplayName => "请求一次明镜";
-    public NodeParamInfo[] Params => [new("waitForCharge", "等待层数可用", "百级单体：开启后等待充能；关闭且无充能则报错丢弃。绕过明镜QT，主动准备并正常穿插一次明镜", "bool")];
+    public NodeParamInfo[] Params => [new("waitForCharge", "等待层数可用", "关闭且无充能时丢弃请求", "bool")];
     public string GetParam(string fieldName) => fieldName == "waitForCharge" ? _waitForCharge.ToString() : "";
     public void SetParam(string fieldName, string value)
     {

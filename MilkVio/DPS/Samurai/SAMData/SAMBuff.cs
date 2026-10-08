@@ -15,4 +15,5 @@ public static class SAMBuff
     public static uint 燕回返预备4 = 4217;
     public static uint 燕飞效果提高 = 1236;
     public static uint 彼岸花 = 1228;
+    public static uint 默想 = 1231;
 }

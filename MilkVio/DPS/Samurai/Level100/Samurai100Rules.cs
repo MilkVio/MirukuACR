@@ -50,7 +50,8 @@ internal static class Samurai100Rules
     public static uint SafePadding(Samurai100State s, bool both = false)
     {
         var combo = s.ComboLeft > s.GcdLeft + Samurai100Helper.EffectMargin ? s.Combo : 0;
-        if (s.MirrorStacks > 0 || combo == SAMSkill.阵风 || combo == SAMSkill.士风) return 0;
+        if (s.MirrorStacks > 0 || combo == SAMSkill.阵风 || combo == SAMSkill.士风 ||
+            s.GatherSen && combo == SAMSkill.风光) return 0;
         var fillers = both && combo != SAMSkill.晓风 ? 2 : 1;
         var untilIai = s.GcdLeft + (fillers + (s.ReturnLeft > 0 ? 1 : 0)) * s.Gcd + s.Cast + Samurai100Helper.EffectMargin;
         if (s.Tendo > 0 && s.Tendo <= untilIai) return 0;
@@ -73,7 +74,8 @@ internal static class Samurai100Rules
     public static uint WaitingIaijutsu(Samurai100State s, bool keepSen)
     {
         var ready = s.GcdLeft + Samurai100Helper.EffectMargin;
-        var lastCombo = s.ComboLeft > ready && (s.Combo == SAMSkill.阵风 || s.Combo == SAMSkill.士风);
+        var lastCombo = s.ComboLeft > ready && (s.Combo == SAMSkill.阵风 || s.Combo == SAMSkill.士风 ||
+            s.GatherSen && s.Combo == SAMSkill.风光);
         var mirror = s.MirrorStacks > 0 && s.MirrorLeft > ready;
         if (!lastCombo && !mirror) return 0;
         if (s.SenCount == 3 && (s.Moon > ready + s.Cast ||
@@ -179,7 +181,7 @@ internal static class Samurai100Rules
     }
 
     public static int KenkiGain(uint action) => action == SAMSkill.雪风 ? 15 :
-        action == SAMSkill.月光 || action == SAMSkill.花车 ? 10 :
+        action == SAMSkill.月光 || action == SAMSkill.花车 || Samurai100Gather.IsAoe(action) ? 10 :
         action == SAMSkill.晓风 || action == SAMSkill.阵风 || action == SAMSkill.士风 ? 5 : 0;
 
     public static int NextGain(Samurai100State s) => KenkiGain(Samurai100Projection.NextResourceGcd(s));

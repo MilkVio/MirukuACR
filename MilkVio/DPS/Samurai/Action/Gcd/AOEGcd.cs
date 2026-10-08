@@ -3,6 +3,7 @@ using PromeRotation.Extensions;
 using PromeRotation.Helpers;
 using PromeRotation.Resolvers;
 using MilkVio.DPS.Samurai.SAMData;
+using MilkVio.DPS.Samurai.Level100;
 
 namespace MilkVio.DPS.Samurai.Action.Gcd;
 
@@ -13,6 +14,8 @@ public class AOEGcd : IDecisionResolver
         var enemyCount = TargetHelper.EnemyIn5m();
         if (Core.Target == null) return new CheckResult(false, "当前无目标");
         if (Core.Target.EntityId == Core.Me.EntityId) return new CheckResult(false, "当前目标为自己");
+        if (Samurai100Helper.GatherSen)
+            return new CheckResult(enemyCount > 0 && Samurai100Gather.IsAoe(GatherAction()), "AOE凑闪");
         if (!PromeSettings.Instance.GetQt(SAMQt.AOE)) return new CheckResult(false, "未开启AOEQT");
         
         if (enemyCount >= 3)
@@ -25,6 +28,8 @@ public class AOEGcd : IDecisionResolver
 
     public PAction GetAction()
     {
+        if (Samurai100Helper.GatherSen)
+            return new PAction(GatherAction(), ActionType.Gcd, ActionTargetType.Self);
         var lastActionId = ActionHelper.GetLastComboID();
         var has花 = JobGaugeHelper.SAM.HasHana;
         var has月 = JobGaugeHelper.SAM.HasMoon;
@@ -48,4 +53,7 @@ public class AOEGcd : IDecisionResolver
         
         return new PAction(SamuraiHelper.Get1ComboActionId(true), ActionType.Gcd, ActionTargetType.Self);
     }
+
+    private static uint GatherAction() => Samurai100Planning.TryGcd(out var action, out _) ? action :
+        Samurai100Projection.NextResourceGcd(Samurai100Planning.ReadState());
 }
